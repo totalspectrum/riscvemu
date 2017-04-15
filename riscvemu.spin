@@ -15,14 +15,19 @@ enter
 		mov	temp, par
 		rdlong	cmd_addr, temp
 		add	temp, #4
+		rdlong	membase, temp
+		add	temp, #4
+		rdlong	pc, temp
+		add	temp, #4
+		add	pc, membase
 		rdlong	dbgreg_addr, temp
 
-		mov	x0+1, #1
+execlp
+		rdlong	opcode, pc
 		call	#break
-		mov	x0+24, #$ab
-		call	#break
-done		jmp	#done
-
+		add	pc, #4
+		mov	x0+1, opcode
+		jmp	#execlp
 
 break
 		rdlong	temp, cmd_addr
@@ -100,8 +105,9 @@ dst2		long	2 << 9
 i2s7		long	(2<<23) | 7
 
 temp		long 0
-dbgreg_addr	long 0
-cmd_addr	long 0
+dbgreg_addr	long 0	' address where registers go in HUB during debug
+cmd_addr	long 0	' address of HUB command word
+membase		long 0	' base of emulated RAM
 hubaddr		long 0
 cogaddr		long 0
 hubcnt		long 0

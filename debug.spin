@@ -29,7 +29,7 @@ progmem
 	long	3
 	long	4
 	
-PUB demo
+PUB demo | cmd, arg
   ser.start(31, 30, 0, 115200)
   ser.str(string("Processor emulation", 13, 10))
   ser.str(string("starting emulation..."))
@@ -43,9 +43,15 @@ PUB demo
   repeat
     repeat
     while cmdreg == 0
-    if (cmdreg == 1)
+    cmd := cmdreg & $f
+    arg := cmdreg >> 4
+    if (cmd == 1)	' single step
       dumpregs
       waitforkey
+    elseif (cmd == 2)	' illegal instruction
+      ser.str(string("*** illegal instruction ***", 13, 10))
+    elseif (cmd == $f) ' write a byte
+      ser.tx(arg)
     cmdreg := 0
 
 PRI nl

@@ -22,31 +22,53 @@ enter
 		add	pc, membase
 		rdlong	dbgreg_addr, temp
 
-execlp
+nexti
 		rdlong	opcode, pc
-		call	#break
+		call	#singlestep
 		add	pc, #4
+		'' check for valid opcodes
+		'' the two lower bits must be 11
+		'' that means nonzero, even parity on those two bits
+		test	opcode, #3 wz,wc
+   if_c_or_z	jmp	#illegal_instr
 		mov	x0+1, opcode
-		jmp	#execlp
+		jmp	#nexti
 
-break
-		rdlong	temp, cmd_addr
-		cmp	temp, #0 wz
-    if_nz	jmp	#break
-    
-    		mov	cogaddr, #x0
+illegal_instr
+		mov	newcmd, #2	' signal illegal instruction
+		call	#sendcmd
+		jmp	#nexti
+		
+singlestep
+		call	#dumpregs
+		mov	newcmd, #1	' single step command
+		call	#sendcmd	' send info
+		call	#waitcmdclear	' wait for response
+singlestep_ret	ret
+		
+dumpregs
+		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #34*4
 		
 		call	#cogxfr_write
-		
-		mov	temp, #1
-		wrlong	temp, cmd_addr
-brkwait		rdlong	temp, cmd_addr
-		cmp	temp, #0 wz
-   if_nz	jmp	#brkwait
-break_ret	ret
+dumpregs_ret
+		ret
 
+newcmd		long 0
+sendcmd
+		call	#waitcmdclear
+		wrlong	newcmd, cmd_addr
+sendcmd_ret	ret
+		
+waitcmdclear
+		rdlong	temp, cmd_addr
+		cmp	temp, #0 wz
+	if_nz	jmp	#waitcmdclear	' far end is still processing last command
+waitcmdclear_ret
+		ret
+		
+	
 '------------------------------------------------------------------------------
 ' routines for fast transfer of COG memory to/from hub
 ' "hubaddr"   is the HUB memory address

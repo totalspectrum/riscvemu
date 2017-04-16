@@ -26,9 +26,11 @@ DAT
 progmem
 	long	$12350513	' addi a0,a0,0x123
 	long	$0f056513	' ori a0,a0,$0f0
+	long	$00f52513	' slti a0,a0,15
 	long	$87654537	' lui a0, 0x87654
 	long	$32150513	' addi a0,a0,0x123
-	long	4
+	long	$00f52513	' slti a0,a0,15
+	long	0		' illegal
 	
 PUB demo | cmd, arg
   ser.start(31, 30, 0, 115200)

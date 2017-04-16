@@ -52,15 +52,19 @@ opcode0entry
 
 '' these generally contain the PROPELLER opcode needed to
 '' implement the corresponding RISC-V instruction
+'' there are some special circumstances:
+''   the cmp based instructions (low bit 0); these need further
+''   expansion to implement slt / sltu
+'' 
 mathtab
-{0}		long	%1000_0000_1	'' add
-{1}		long	%0010_1100_1	'' slli = shl
-{2}		long	%1100_0011_0	'' slti = cmps, but special
-{3}		long	%1000_0111_0	'' sltiu = cmp, but special
-{4}		long	%0110_1100_1	'' xori
-{5}		long	%0010_1000_1	'' srli or srai, based on imm 
-{6}		long	%0110_1000_1	'' ori
-{7}		long	%0110_0000_1	'' andi
+{0}		jmp	#imp_add
+{1}		jmp	#imp_sll	'' shl
+{2}		jmp	#imp_slt	'' set if less than, signed
+{3}		jmp	#imp_sltu	'' set if less than, unsigned
+{4}		jmp	#imp_xor	'' xori
+{5}		jmp	#imp_shr	'' srli or srai, based on imm 
+{6}		jmp	#imp_or		'' ori
+{7}		jmp	#imp_and	'' andi
 
 init
 		mov	opcodetab, opcode0entry
@@ -116,15 +120,44 @@ immediateop
 		shr	funct3, #12
 		and	funct3, #7
 		add	funct3, #mathtab	' funct3 pts at instruction
-		movs	:fetch, funct3
 		movs	:exec1, rs1
 		movd	:writeback, rd
-:fetch		movi	:exec2, 0-0		' set specific opcode
-		'' actually execute the decoded instruction here
 :exec1		mov	temp, 0-0
-:exec2		add	temp, rs2	' write actual instruction here
+		'' actually execute the decoded instruction here
+		jmpret	mathret, funct3
 :writeback	mov	0-0, temp
 		jmp	#nexti
+mathret		long	0
+
+		'' execute math instructions
+		'' for all of these, rs1 is in temp, rs2 has the needed value
+		'' result should go in temp
+imp_add
+		add	temp, rs2
+		jmp	mathret
+imp_sll		shl	temp, rs2
+		jmp	mathret
+imp_slt		cmps	temp, rs2 wz,wc
+		mov	temp, #0
+  if_b		mov	temp, #1
+  		jmp	mathret
+imp_sltu	cmp	temp, rs2 wz,wc
+		jmp	#imp_slt+1
+imp_xor		xor	temp, rs2
+		jmp	mathret
+imp_shr
+		'' depending on opcode we do sar or shr
+		test	opcode, sra_mask wz
+	if_z	shr	temp, rs2
+	if_nz	sar	temp, rs2
+		jmp	mathret
+imp_or		or	temp, rs2
+		jmp	mathret
+imp_and		and	temp, rs2
+		jmp	mathret
+		'' for sra 31..26 = 16
+		'' so 31..24 = 64 = $40
+sra_mask	long	$40000000
 
 		'' load upper immediate
 lui

@@ -24,8 +24,8 @@ VAR
 DAT
 
 progmem
-	long	$12350513
-	long	$00150513
+	long	$12350513	' add a0,a0,$123
+	long	$0f056513	' ori a0,a0,$0f0
 	long	2
 	long	3
 	long	4

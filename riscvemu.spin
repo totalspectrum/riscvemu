@@ -49,16 +49,18 @@ opcodetab
 
 opcode0entry
 		jmp	#illegalinstr	'' load
-		
+
+'' these generally contain the PROPELLER opcode needed to
+'' implement the corresponding RISC-V instruction
 mathtab
-{0}		long	0	'' add
-{1}		long	1	'' slli
-{2}		long	2	'' slti
-{3}		long	3	'' sltiu
-{4}		long	4	'' xori
-{5}		long	5	'' srli or srai, based on imm 
-{6}		long	6	'' ori
-{7}		long	7	'' andi
+{0}		long	%1000_0000_1	'' add
+{1}		long	%0010_1100_1	'' slli = shl
+{2}		long	%1100_0011_0	'' slti = cmps, but special
+{3}		long	%1000_0111_0	'' sltiu = cmp, but special
+{4}		long	%0110_1100_1	'' xori
+{5}		long	%0010_1000_1	'' srli or srai, based on imm 
+{6}		long	%0110_1000_1	'' ori
+{7}		long	%0110_0000_1	'' andi
 
 init
 		mov	opcodetab, opcode0entry
@@ -109,11 +111,11 @@ immediateop
 		mov	funct3, opcode
 		shr	funct3, #12
 		and	funct3, #7
-		add	funct3, #mathtab	' funct3 pts at opcode
+		add	funct3, #mathtab	' funct3 pts at instruction
 		movs	:fetch, funct3
 		movs	:exec1, rs1
 		movd	:writeback, rd
-:fetch		mov	funct3, 0-0
+:fetch		movi	:exec2, 0-0		' set specific opcode
 		'' actually execute the decoded instruction here
 :exec1		mov	temp, 0-0
 :exec2		add	temp, rs2	' write actual instruction here

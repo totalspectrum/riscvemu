@@ -24,10 +24,10 @@ VAR
 DAT
 
 progmem
-	long	$12350513	' add a0,a0,$123
+	long	$12350513	' addi a0,a0,0x123
 	long	$0f056513	' ori a0,a0,$0f0
-	long	2
-	long	3
+	long	$87654537	' lui a0, 0x87654
+	long	$32150513	' addi a0,a0,0x123
 	long	4
 	
 PUB demo | cmd, arg

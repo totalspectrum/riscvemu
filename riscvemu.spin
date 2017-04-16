@@ -13,22 +13,22 @@ DAT
 		org 0
 enter
 opcodetab
-{00}		jmp	#init
-{01}		jmp	#illegalinstr
-{02}		jmp	#illegalinstr
-{03}		jmp	#illegalinstr
-{04}		jmp	#immediateop
-{05}		jmp	#illegalinstr
-{06}		jmp	#illegalinstr
-{07}		jmp	#illegalinstr
-{08}		jmp	#illegalinstr
-{09}		jmp	#illegalinstr
-{0A}		jmp	#illegalinstr
-{0B}		jmp	#illegalinstr
-{0C}		jmp	#illegalinstr
-{0D}		jmp	#illegalinstr
-{0E}		jmp	#illegalinstr
-{0F}		jmp	#illegalinstr
+{00}		jmp	#init		' load
+{01}		jmp	#illegalinstr	' float load
+{02}		jmp	#illegalinstr	' custom0
+{03}		jmp	#illegalinstr	' fence
+{04}		jmp	#immediateop	' math immediate
+{05}		jmp	#illegalinstr	' auipc
+{06}		jmp	#illegalinstr	' wide math imm
+{07}		jmp	#illegalinstr	' ???
+{08}		jmp	#illegalinstr	' store
+{09}		jmp	#illegalinstr	' float store
+{0A}		jmp	#illegalinstr	' custom1
+{0B}		jmp	#illegalinstr	' atomics
+{0C}		jmp	#illegalinstr	' math reg
+{0D}		jmp	#lui		' lui
+{0E}		jmp	#illegalinstr	' wide math reg
+{0F}		jmp	#illegalinstr	' ???
 
 {10}		jmp	#illegalinstr
 {11}		jmp	#illegalinstr
@@ -74,6 +74,9 @@ init
 		add	pc, membase
 		rdlong	dbgreg_addr, temp
 
+		''
+		'' main instruction decode loop
+		''
 nexti
 		rdlong	opcode, pc
 		call	#singlestep
@@ -99,7 +102,8 @@ illegalinstr
 		mov	newcmd, #2	' signal illegal instruction
 		call	#sendcmd
 		jmp	#nexti
-		
+
+		'' math immediate operations
 immediateop
   if_z		jmp	#nexti			' rd == x0 means nop
 		mov	rs2, opcode
@@ -121,7 +125,19 @@ immediateop
 :exec2		add	temp, rs2	' write actual instruction here
 :writeback	mov	0-0, temp
 		jmp	#nexti
-		
+
+		'' load upper immediate
+lui
+		'' ignore writes to x0
+    if_z	jmp	#nexti
+		'' set up to write to rd
+		movd   :luiwrite, rd
+    		'' extract upper immediate
+		and	opcode, luimask
+:luiwrite	mov	0-0, opcode
+		jmp	#nexti
+luimask		long	$fffff000
+
 singlestep
 		call	#dumpregs
 		mov	newcmd, #1	' single step command

@@ -24,7 +24,8 @@ VAR
 DAT
 
 progmem
-	long	1
+	long	$12350513
+	long	$00150513
 	long	2
 	long	3
 	long	4
@@ -80,5 +81,5 @@ PRI dumpregs | i,j
 PRI waitforkey | c
    ser.str(string("*** press a key to continue ***"))
    c := ser.rx
-   ser.tx(13)
+   nl
 

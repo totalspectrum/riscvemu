@@ -12,6 +12,56 @@ PUB stop
 DAT
 		org 0
 enter
+opcodetab
+{00}		jmp	#init
+{01}		jmp	#illegalinstr
+{02}		jmp	#illegalinstr
+{03}		jmp	#illegalinstr
+{04}		jmp	#immediateop
+{05}		jmp	#illegalinstr
+{06}		jmp	#illegalinstr
+{07}		jmp	#illegalinstr
+{08}		jmp	#illegalinstr
+{09}		jmp	#illegalinstr
+{0A}		jmp	#illegalinstr
+{0B}		jmp	#illegalinstr
+{0C}		jmp	#illegalinstr
+{0D}		jmp	#illegalinstr
+{0E}		jmp	#illegalinstr
+{0F}		jmp	#illegalinstr
+
+{10}		jmp	#illegalinstr
+{11}		jmp	#illegalinstr
+{12}		jmp	#illegalinstr
+{13}		jmp	#illegalinstr
+{14}		jmp	#illegalinstr
+{15}		jmp	#illegalinstr
+{16}		jmp	#illegalinstr
+{17}		jmp	#illegalinstr
+{18}		jmp	#illegalinstr
+{19}		jmp	#illegalinstr
+{1A}		jmp	#illegalinstr
+{1B}		jmp	#illegalinstr
+{1C}		jmp	#illegalinstr
+{1D}		jmp	#illegalinstr
+{1E}		jmp	#illegalinstr
+{1F}		jmp	#illegalinstr
+
+opcode0entry
+		jmp	#illegalinstr	'' load
+		
+mathtab
+{0}		long	0	'' add
+{1}		long	1	'' slli
+{2}		long	2	'' slti
+{3}		long	3	'' sltiu
+{4}		long	4	'' xori
+{5}		long	5	'' srli or srai, based on imm 
+{6}		long	6	'' ori
+{7}		long	7	'' andi
+
+init
+		mov	opcodetab, opcode0entry
 		mov	temp, par
 		rdlong	cmd_addr, temp
 		add	temp, #4
@@ -30,13 +80,44 @@ nexti
 		'' the two lower bits must be 11
 		'' that means nonzero, even parity on those two bits
 		test	opcode, #3 wz,wc
-   if_c_or_z	jmp	#illegal_instr
-		mov	x0+1, opcode
-		jmp	#nexti
+   if_c_or_z	jmp	#illegalinstr
+   		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f wz
+		add	rd, #x0
+		mov	temp, opcode
+		shr	temp, #2
+		and	temp, #$1f
+		mov	x0+8, temp
+		add	temp, #opcodetab
+		jmp	temp		'' jump to instruction decode
 
-illegal_instr
+		'' come here for illegal instructions
+illegalinstr
 		mov	newcmd, #2	' signal illegal instruction
 		call	#sendcmd
+		jmp	#nexti
+		
+immediateop
+  if_z		jmp	#nexti			' rd == x0 means nop
+		mov	rs2, opcode
+		sar	rs2, #20
+		mov	rs1, opcode
+		shr	rs1, #15
+		and	rs1, #$1f
+		add	rs1, #x0
+		mov	funct3, opcode
+		shr	funct3, #12
+		and	funct3, #7
+		add	funct3, #mathtab	' funct3 pts at opcode
+		movs	:fetch, funct3
+		movs	:exec1, rs1
+		movd	:writeback, rd
+:fetch		mov	funct3, 0-0
+		'' actually execute the decoded instruction here
+:exec1		mov	temp, 0-0
+:exec2		add	temp, rs2	' write actual instruction here
+:writeback	mov	0-0, temp
 		jmp	#nexti
 		
 singlestep
@@ -141,3 +222,7 @@ x0		long	0[32]
 pc		long	0
 opcode		long	0
 
+rd		long	0
+rs1		long	0
+rs2		long	0
+funct3		long	0

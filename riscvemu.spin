@@ -25,7 +25,7 @@ opcodetab
 {09}		jmp	#illegalinstr	' float store
 {0A}		jmp	#illegalinstr	' custom1
 {0B}		jmp	#illegalinstr	' atomics
-{0C}		jmp	#illegalinstr	' math reg
+{0C}		jmp	#regop		' math reg
 {0D}		jmp	#lui		' lui
 {0E}		jmp	#illegalinstr	' wide math reg
 {0F}		jmp	#illegalinstr	' ???
@@ -94,10 +94,10 @@ nexti
 		shr	rd, #7
 		and	rd, #$1f wz
 		add	rd, #x0
+   if_z		mov	rd, #temp	' write to x0 get ignored
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f
-		mov	x0+8, temp
 		add	temp, #opcodetab
 		jmp	temp		'' jump to instruction decode
 
@@ -107,11 +107,25 @@ illegalinstr
 		call	#sendcmd
 		jmp	#nexti
 
-		'' math immediate operations
-immediateop
-  if_z		jmp	#nexti			' rd == x0 means nop
+
+		'' math register operations
+regop
 		mov	rs2, opcode
 		sar	rs2, #20
+		and	rs2, #$1f
+		add	rs2, #x0
+		movs	:fetchrs, rs2
+		movs	mathtab, #imp_addsub
+:fetchrs	mov	rs2, 0-0
+		jmp	#domath
+		
+		'' math immediate operations
+immediateop
+		movs	mathtab, #imp_add
+		mov	rs2, opcode
+		sar	rs2, #20
+
+domath
 		mov	rs1, opcode
 		shr	rs1, #15
 		and	rs1, #$1f
@@ -122,10 +136,18 @@ immediateop
 		add	funct3, #mathtab	' funct3 pts at instruction
 		movs	:exec1, rs1
 		movd	:writeback, rd
-:exec1		mov	temp, 0-0
+		mov	x0+24, #$aa	' FIXME
+		mov	x0+25, dest	' FIXME
+		mov	x0+26, rs2	' FIXME
+		mov	x0+27, rs1	' FIXME
+:exec1		mov	dest, 0-0
 		'' actually execute the decoded instruction here
+		mov	x0+28, #$bb	' FIXME
+		mov	x0+29, dest	' FIXME
+		mov	x0+30, rs2	' FIXME
+
 		jmpret	mathret, funct3
-:writeback	mov	0-0, temp
+:writeback	mov	0-0, dest
 		jmp	#nexti
 mathret		long	0
 
@@ -133,27 +155,34 @@ mathret		long	0
 		'' for all of these, rs1 is in temp, rs2 has the needed value
 		'' result should go in temp
 imp_add
-		add	temp, rs2
+		add	dest, rs2
 		jmp	mathret
-imp_sll		shl	temp, rs2
+imp_addsub
+		test	opcode, sra_mask wz
+	if_z	add	dest, rs2
+	if_nz	sub	dest, rs2
 		jmp	mathret
-imp_slt		cmps	temp, rs2 wz,wc
-		mov	temp, #0
-  if_b		mov	temp, #1
+
+imp_sll		shl	dest, rs2
+		jmp	mathret
+imp_slt		cmps	dest, rs2 wz,wc
+		mov	dest, #0
+  if_b		mov	dest, #1
   		jmp	mathret
-imp_sltu	cmp	temp, rs2 wz,wc
+imp_sltu	cmp	dest, rs2 wz,wc
 		jmp	#imp_slt+1
-imp_xor		xor	temp, rs2
+imp_xor
+		xor	dest, rs2	' FIXME
 		jmp	mathret
 imp_shr
 		'' depending on opcode we do sar or shr
 		test	opcode, sra_mask wz
-	if_z	shr	temp, rs2
-	if_nz	sar	temp, rs2
+	if_z	shr	dest, rs2
+	if_nz	sar	dest, rs2
 		jmp	mathret
-imp_or		or	temp, rs2
+imp_or		or	dest, rs2
 		jmp	mathret
-imp_and		and	temp, rs2
+imp_and		and	dest, rs2
 		jmp	mathret
 		'' for sra 31..26 = 16
 		'' so 31..24 = 64 = $40
@@ -161,8 +190,6 @@ sra_mask	long	$40000000
 
 		'' load upper immediate
 lui
-		'' ignore writes to x0
-    if_z	jmp	#nexti
 		'' set up to write to rd
 		movd   :luiwrite, rd
     		'' extract upper immediate
@@ -259,6 +286,7 @@ dst2		long	2 << 9
 i2s7		long	(2<<23) | 7
 
 temp		long 0
+dest		long 0
 dbgreg_addr	long 0	' address where registers go in HUB during debug
 cmd_addr	long 0	' address of HUB command word
 membase		long 0	' base of emulated RAM
@@ -277,3 +305,5 @@ rd		long	0
 rs1		long	0
 rs2		long	0
 funct3		long	0
+
+		fit	$120	'$1F0 is whole thing

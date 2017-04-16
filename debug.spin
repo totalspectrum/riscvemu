@@ -24,13 +24,14 @@ VAR
 DAT
 
 progmem
-	long	$12350513	' addi a0,a0,0x123
-	long	$0f056513	' ori a0,a0,$0f0
-	long	$00f52513	' slti a0,a0,15
-	long	$87654537	' lui a0, 0x87654
-	long	$32150513	' addi a0,a0,0x123
-	long	$00f52513	' slti a0,a0,15
-	long	0		' illegal
+	long	$01106413	' ori x8, x0, 0x11
+	long	$01044413	' xori x8, x8, 0x10
+	long	$123454b7	' lui x9, 0x12345
+	long	$67848493	' addi x9, x9, 0x678
+	long	$408484b3	' sub  x9, x9, x8
+	long	$40800533	' sub x10, x0, x8	' 
+	long	$40800033	' sub x0, x0, x8
+	long	0
 	
 PUB demo | cmd, arg
   ser.start(31, 30, 0, 115200)

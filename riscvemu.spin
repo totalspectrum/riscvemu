@@ -13,7 +13,7 @@ DAT
 		org 0
 enter
 opcodetab
-{00}		jmp	#init		' load
+{00}		jmp	#init		' replaced with load instruction
 {01}		jmp	#illegalinstr	' float load
 {02}		jmp	#illegalinstr	' custom0
 {03}		jmp	#illegalinstr	' fence
@@ -21,7 +21,7 @@ opcodetab
 {05}		jmp	#auipc		' auipc
 {06}		jmp	#illegalinstr	' wide math imm
 {07}		jmp	#illegalinstr	' ???
-{08}		jmp	#illegalinstr	' store
+{08}		jmp	#storeop	' store
 {09}		jmp	#illegalinstr	' float store
 {0A}		jmp	#illegalinstr	' custom1
 {0B}		jmp	#illegalinstr	' atomics
@@ -48,7 +48,7 @@ opcodetab
 {1F}		jmp	#illegalinstr
 
 opcode0entry
-		jmp	#illegalinstr	'' load
+		jmp	#loadop		'' load
 
 '' these generally contain the PROPELLER opcode needed to
 '' implement the corresponding RISC-V instruction
@@ -79,10 +79,15 @@ init
 		add	temp, #4
 		add	pc, membase
 		rdlong	dbgreg_addr, temp
-
+		jmp	#nexti
+		
 		''
 		'' main instruction decode loop
 		''
+
+		'' write back last result from "dest" here
+write_and_nexti
+		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
 		call	#singlestep
@@ -92,11 +97,12 @@ nexti
 		'' that means nonzero, even parity on those two bits
 		test	opcode, #3 wz,wc
    if_c_or_z	jmp	#illegalinstr
-   		mov	rd, opcode
-		shr	rd, #7
-		and	rd, #$1f wz
-		add	rd, #x0
-   if_z		mov	rd, #dest	' writes to x0 get ignored
+   		mov	temp, opcode
+		shr	temp, #7
+		and	temp, #$1f wz
+		add	temp, #x0
+   if_z		mov	temp, #dest	' writes to x0 get ignored
+   		movd	write_and_nexti, temp
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f
@@ -108,6 +114,18 @@ illegalinstr
 		mov	newcmd, #2	' signal illegal instruction
 		call	#sendcmd
 		jmp	#nexti
+
+
+		''
+		'' utility: extract rs1 field from opcode
+		'' NOTE: does not actually read value from register
+		''
+getrs1
+		mov	rs1, opcode
+		shr	rs1, #15
+		and	rs1, #$1f
+		add	rs1, #x0
+getrs1_ret	ret
 
 
 		'' math register operations
@@ -128,81 +146,75 @@ immediateop
 		sar	rs2, #20
 
 domath
-		mov	rs1, opcode
-		shr	rs1, #15
-		and	rs1, #$1f
-		add	rs1, #x0
+		call	#getrs1
+		movs	:exec1, rs1
 		mov	funct3, opcode
+:exec1		mov	dest, 0-0		' load rs1 into dest
 		shr	funct3, #12
 		and	funct3, #7
 		add	funct3, #mathtab	' funct3 pts at instruction
-		movs	:exec1, rs1
-		movd	:writeback, rd
-:exec1		mov	dest, 0-0
-		'' actually execute the decoded instruction here
 
-		jmpret	mathret, funct3
-:writeback	mov	0-0, dest
-		jmp	#nexti
-mathret		long	0
+		'' actually execute the decoded instruction here
+		jmp	funct3
 
 		'' execute math instructions
 		'' for all of these, rs1 is in temp, rs2 has the needed value
 		'' result should go in temp
 imp_add
 		add	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
 imp_addsub
 		test	opcode, sra_mask wz
 	if_z	add	dest, rs2
 	if_nz	sub	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
 
 imp_sll		shl	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
+		
 imp_slt		cmps	dest, rs2 wz,wc
 		mov	dest, #0
   if_b		mov	dest, #1
-  		jmp	mathret
+  		jmp	#write_and_nexti
 imp_sltu	cmp	dest, rs2 wz,wc
 		jmp	#imp_slt+1
 imp_xor
 		xor	dest, rs2	' FIXME
-		jmp	mathret
+		jmp	#write_and_nexti
 imp_shr
 		'' depending on opcode we do sar or shr
 		test	opcode, sra_mask wz
 	if_z	shr	dest, rs2
 	if_nz	sar	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
+		
 imp_or		or	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
+		
 imp_and		and	dest, rs2
-		jmp	mathret
+		jmp	#write_and_nexti
+		
 		'' for sra 31..26 = 16
 		'' so 31..24 = 64 = $40
 sra_mask	long	$40000000
 
 '' load upper immediate (20 bits)
 lui
-		'' set up to write to rd
-		movd   :luiwrite, rd
     		'' extract upper immediate
-		and	opcode, luimask
-:luiwrite	mov	0-0, opcode
-		jmp	#nexti
+		mov	dest, opcode
+		and	dest, luimask
+		jmp	#write_and_nexti
 luimask		long	$fffff000
+
 
 '' load upper 20 bits, added with pc
 auipc
-		'' set up to write to rd
-		movd   :auipcwr, rd
-    		'' extract upper immediate
-		and	opcode, luimask
-		add	opcode, pc
-		sub	opcode, #4
-:auipcwr	mov	0-0, opcode
-		jmp	#nexti
+		mov	dest, opcode
+		and	dest, luimask
+		add	dest, pc
+		sub	dest, membase
+		sub	dest, #4
+		jmp	#write_and_nexti
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' jal: jump and link
@@ -210,7 +222,6 @@ auipc
 Jmask		long	$fff00fff
 Jbit11		long	(1<<11)
 jal
-		movd	:jalwr, rd	' set up to write result
 		mov	temp, opcode	' extract J-immediate
 		sar	temp, #20	' sign extend, get some bits in place
 		and	temp, Jmask
@@ -220,14 +231,13 @@ jal
 		andn	temp, #1 	' clear low bit
 		muxc	temp, JBit11	' set bit 11
 		sub	pc, membase	' and for offset
-:jalwr		mov	0-0, pc		' save old pc
+		mov	dest, pc		' save old pc
 		sub	pc, #4		' compensate for pc bump
 		add	pc, membase
 		add	pc, temp
-		jmp	#nexti
+		jmp	#write_and_nexti
 
 jalr
-		movd	:jalrwr, rd	' set up to write result
 		mov	rs1, opcode
 		sar	opcode, #20	' get offset
 		shr	rs1, #15
@@ -235,11 +245,62 @@ jalr
 		add	rs1, #x0
 		movs	:jalfetch, rs1
 		sub	pc, membase
-:jalrwr		mov	0-0, pc		' save old pc
+		mov	dest, pc	' save old pc
 :jalfetch	mov	pc, 0-0		' fetch rs1 value
 		add	pc, membase
 		add	pc, opcode
-		jmp	#nexti
+		jmp	#write_and_nexti
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' implement load and store
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'
+' table of load instructions
+' the I field gives the PASM instruction we have to use to implement
+' the load; the S field is 0 for unsigned load, 1 for signed
+
+loadtab
+		jmp	#do_rdbyte
+		jmp	#do_rdword
+		jmp	#do_rdlong
+		jmp	#illegalinstr
+		
+loadop
+		call	#getrs1
+		movs	:set, rs1
+		mov	funct3, opcode
+:set		mov	dest, 0-0	' set dest to value of rs1
+		shr	funct3, #12
+		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
+		and	funct3, #3
+		add	funct3, #loadtab
+		sar	opcode, #20	' extract immediate
+		add	dest, opcode	' add offset
+		jmp	funct3
+
+		'' sign bit was set above
+do_rdbyte
+		add	dest, membase
+		rdbyte	dest, dest
+	if_z	shl	dest, #24	' if z bit set, sign extend
+	if_z	sar	dest, #24
+		jmp	#write_and_nexti
+do_rdword
+		add	dest, membase
+		rdword	dest, dest
+	if_z	shl	dest, #16	' if z bit set, sign extend
+	if_z	sar	dest, #16
+		jmp	#write_and_nexti
+do_rdlong
+		add	dest, membase
+		rdlong	dest, dest
+		jmp	#write_and_nexti
+
+
+storeop
+		jmp	#illegalinstr
+		
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 singlestep

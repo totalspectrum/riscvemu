@@ -1,5 +1,12 @@
 	.text
 start:
+	j	next
+val1:	.long	-1
+next:	
+	addi	x7, x0, 4		# get address of val1 into x7
+	lw	x8, 0(x7)
+	lb	x9, 0(x7)
+	lhu	x10, 2(x7)
 	ori	x8, x0, 0x11
 	xori	x8, x8, 0x10	# leaves 1 in x8
 	ori	x10, x0, 0x123
@@ -22,4 +29,5 @@ subr:
 	andi	x10, x10, 0xFF
 	sub	x10, x0, x10
 	jalr	x0, x1
+	
 	

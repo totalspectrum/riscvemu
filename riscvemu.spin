@@ -138,15 +138,8 @@ domath
 		add	funct3, #mathtab	' funct3 pts at instruction
 		movs	:exec1, rs1
 		movd	:writeback, rd
-		mov	x0+24, #$aa	' FIXME
-		mov	x0+25, dest	' FIXME
-		mov	x0+26, rs2	' FIXME
-		mov	x0+27, rs1	' FIXME
 :exec1		mov	dest, 0-0
 		'' actually execute the decoded instruction here
-		mov	x0+28, #$bb	' FIXME
-		mov	x0+29, dest	' FIXME
-		mov	x0+30, rs2	' FIXME
 
 		jmpret	mathret, funct3
 :writeback	mov	0-0, dest

@@ -18,7 +18,7 @@ opcodetab
 {02}		jmp	#illegalinstr	' custom0
 {03}		jmp	#illegalinstr	' fence
 {04}		jmp	#immediateop	' math immediate
-{05}		jmp	#illegalinstr	' auipc
+{05}		jmp	#auipc		' auipc
 {06}		jmp	#illegalinstr	' wide math imm
 {07}		jmp	#illegalinstr	' ???
 {08}		jmp	#illegalinstr	' store
@@ -36,15 +36,15 @@ opcodetab
 {13}		jmp	#illegalinstr
 {14}		jmp	#illegalinstr
 {15}		jmp	#illegalinstr
-{16}		jmp	#illegalinstr
+{16}		jmp	#illegalinstr	' custom2
 {17}		jmp	#illegalinstr
-{18}		jmp	#illegalinstr
-{19}		jmp	#illegalinstr
+{18}		jmp	#illegalinstr	' conditional branch
+{19}		jmp	#jalr
 {1A}		jmp	#illegalinstr
-{1B}		jmp	#illegalinstr
-{1C}		jmp	#illegalinstr
+{1B}		jmp	#jal
+{1C}		jmp	#illegalinstr	' system
 {1D}		jmp	#illegalinstr
-{1E}		jmp	#illegalinstr
+{1E}		jmp	#illegalinstr	' custom3
 {1F}		jmp	#illegalinstr
 
 opcode0entry
@@ -72,6 +72,8 @@ init
 		rdlong	cmd_addr, temp
 		add	temp, #4
 		rdlong	membase, temp
+		add	temp, #4
+		rdlong	memsize, temp
 		add	temp, #4
 		rdlong	pc, temp
 		add	temp, #4
@@ -188,7 +190,7 @@ imp_and		and	dest, rs2
 		'' so 31..24 = 64 = $40
 sra_mask	long	$40000000
 
-		'' load upper immediate
+'' load upper immediate (20 bits)
 lui
 		'' set up to write to rd
 		movd   :luiwrite, rd
@@ -197,6 +199,55 @@ lui
 :luiwrite	mov	0-0, opcode
 		jmp	#nexti
 luimask		long	$fffff000
+
+'' load upper 20 bits, added with pc
+auipc
+		'' set up to write to rd
+		movd   :auipcwr, rd
+    		'' extract upper immediate
+		and	opcode, luimask
+		add	opcode, pc
+		sub	opcode, #4
+:auipcwr	mov	0-0, opcode
+		jmp	#nexti
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''
+'' jal: jump and link
+''''''''''''''''''''''''''''''''''''''''''''''''''''
+Jmask		long	$fff00fff
+Jbit11		long	(1<<11)
+jal
+		movd	:jalwr, rd	' set up to write result
+		mov	temp, opcode	' extract J-immediate
+		sar	temp, #20	' sign extend, get some bits in place
+		and	temp, Jmask
+		andn	opcode, Jmask
+		or	temp, opcode	' set bits 19:12
+		test	temp, #1 wc	' check old bit 20
+		andn	temp, #1 	' clear low bit
+		muxc	temp, JBit11	' set bit 11
+		sub	pc, membase	' and for offset
+:jalwr		mov	0-0, pc		' save old pc
+		sub	pc, #4		' compensate for pc bump
+		add	pc, membase
+		add	pc, temp
+		jmp	#nexti
+
+jalr
+		movd	:jalrwr, rd	' set up to write result
+		mov	rs1, opcode
+		sar	opcode, #20	' get offset
+		shr	rs1, #15
+		and	rs1, #$1f
+		add	rs1, #x0
+		movs	:jalfetch, rs1
+		sub	pc, membase
+:jalrwr		mov	0-0, pc		' save old pc
+:jalfetch	mov	pc, 0-0		' fetch rs1 value
+		add	pc, membase
+		add	pc, opcode
+		jmp	#nexti
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 singlestep
 		call	#dumpregs
@@ -209,8 +260,9 @@ dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #34*4
-		
+		sub	pc, membase	' adjust for VM
 		call	#cogxfr_write
+		add	pc, membase	' adjust for VM
 dumpregs_ret
 		ret
 
@@ -290,6 +342,7 @@ dest		long 0
 dbgreg_addr	long 0	' address where registers go in HUB during debug
 cmd_addr	long 0	' address of HUB command word
 membase		long 0	' base of emulated RAM
+memsize		long 0	' size of emulated RAM
 hubaddr		long 0
 cogaddr		long 0
 hubcnt		long 0

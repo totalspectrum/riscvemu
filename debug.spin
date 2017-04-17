@@ -8,6 +8,9 @@ CON
 OBJ
   ser: "FullDuplexSerial"
   proc: "riscvemu"
+
+CON
+  memsize = 16*1024
   
 VAR
   ' regs are 32 general purpose registers, followed by pc and debug
@@ -15,23 +18,20 @@ VAR
   ' parameter layout
   ' 0 = command register address
   ' 1 = base of memory
-  ' 2 = initial pc
-  ' 3 = debug register address
+  ' 2 = size of memory
+  ' 3 = initial pc
+  ' 4 = debug register address
   '
-  long params[4]
+  long params[5]
   long cmdreg
 
 DAT
 
 progmem
-	long	$01106413	' ori x8, x0, 0x11
-	long	$01044413	' xori x8, x8, 0x10
-	long	$123454b7	' lui x9, 0x12345
-	long	$67848493	' addi x9, x9, 0x678
-	long	$408484b3	' sub  x9, x9, x8
-	long	$40800533	' sub x10, x0, x8	' 
-	long	$40800033	' sub x0, x0, x8
-	long	0
+	long	'' force long alignment
+	file	"test.bin"
+padding
+	byte	0[memsize - (@padding - @progmem)]
 	
 PUB demo | cmd, arg
   ser.start(31, 30, 0, 115200)
@@ -39,8 +39,9 @@ PUB demo | cmd, arg
   ser.str(string("starting emulation..."))
   params[0] := @cmdreg
   params[1] := @progmem ' base of memory
-  params[2] := 0	' initial PC (relative to base)
-  params[3] := @regs	' debug address
+  params[2] := memsize
+  params[3] := 0	' initial PC (relative to base)
+  params[4] := @regs	' debug address
   proc.start(@params)
   ser.str(string("ok"))
   nl

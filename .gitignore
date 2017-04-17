@@ -1,0 +1,5 @@
+*.bin
+*.binary
+*~
+*.o
+*.list

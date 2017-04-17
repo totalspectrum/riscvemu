@@ -96,7 +96,7 @@ nexti
 		shr	rd, #7
 		and	rd, #$1f wz
 		add	rd, #x0
-   if_z		mov	rd, #temp	' write to x0 get ignored
+   if_z		mov	rd, #dest	' writes to x0 get ignored
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f
@@ -252,7 +252,7 @@ singlestep_ret	ret
 dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #34*4
+		mov	hubcnt, #36*4
 		sub	pc, membase	' adjust for VM
 		call	#cogxfr_write
 		add	pc, membase	' adjust for VM
@@ -346,6 +346,8 @@ hubcnt		long 0
 x0		long	0[32]
 pc		long	0
 opcode		long	0
+info1		long	0	' debug info
+info2		long	0	' debug info
 
 rd		long	0
 rs1		long	0

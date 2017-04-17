@@ -2,6 +2,8 @@
 start:
 	ori	x8, x0, 0x11
 	xori	x8, x8, 0x10	# leaves 1 in x8
+	ori	x10, x0, 0x123
+	jal	x1, subr
 	lui	x9, 0x87654
 	addi	x9, x9, 0x321  	# leaves 0x87654321 in x9
 	sub	x9, x9, x8	# leaves 0x87654320 in x9

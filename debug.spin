@@ -14,7 +14,7 @@ CON
   
 VAR
   ' regs are 32 general purpose registers, followed by pc and debug
-  long regs[34]
+  long regs[36]
   ' parameter layout
   ' 0 = command register address
   ' 1 = base of memory
@@ -80,6 +80,10 @@ PRI dumpregs | i,j
   ser.hex(regs[32], 8)
   ser.str(string(" dbg="))
   ser.hex(regs[33], 8)
+  ser.str(string(" info1="))
+  ser.hex(regs[34], 8)
+  ser.str(string(" info2="))
+  ser.hex(regs[35], 8)
   nl
 
 PRI waitforkey | c

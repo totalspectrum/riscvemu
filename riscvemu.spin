@@ -1,3 +1,7 @@
+CON
+  CMP_UNSIGNED = %100001_110
+  CMP_SIGNED   = %110000_110
+  
 VAR
   long cog
   
@@ -21,6 +25,7 @@ opcodetab
 {05}		jmp	#auipc		' auipc
 {06}		jmp	#illegalinstr	' wide math imm
 {07}		jmp	#illegalinstr	' ???
+
 {08}		jmp	#storeop	' store
 {09}		jmp	#illegalinstr	' float store
 {0A}		jmp	#illegalinstr	' custom1
@@ -38,7 +43,8 @@ opcodetab
 {15}		jmp	#illegalinstr
 {16}		jmp	#illegalinstr	' custom2
 {17}		jmp	#illegalinstr
-{18}		jmp	#illegalinstr	' conditional branch
+
+{18}		jmp	#condbranch	' conditional branch
 {19}		jmp	#jalr
 {1A}		jmp	#illegalinstr
 {1B}		jmp	#jal
@@ -224,7 +230,7 @@ auipc
 '' jal: jump and link
 ''''''''''''''''''''''''''''''''''''''''''''''''''''
 Jmask		long	$fff00fff
-Jbit11		long	(1<<11)
+bit11		long	(1<<11)
 jal
 		mov	temp, opcode	' extract J-immediate
 		sar	temp, #20	' sign extend, get some bits in place
@@ -233,7 +239,7 @@ jal
 		or	temp, opcode	' set bits 19:12
 		test	temp, #1 wc	' check old bit 20
 		andn	temp, #1 	' clear low bit
-		muxc	temp, JBit11	' set bit 11
+		muxc	temp, bit11	' set bit 11
 		sub	pc, membase	' and for offset
 		mov	dest, pc		' save old pc
 		sub	pc, #4		' compensate for pc bump
@@ -299,6 +305,17 @@ do_rdlong
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
+		''
+		'' re-order bits of opcode so that it is
+		'' an s-type immediate value
+get_s_imm
+		mov	temp, opcode
+		shr	temp, #7
+		and	temp, #$1f
+		sar	opcode, #20
+		andn	opcode, #$1f
+		or	opcode, temp	' opcode has offset
+get_s_imm_ret	ret
 
 storetab
 		jmp	#do_wrbyte
@@ -321,12 +338,7 @@ storeop
 		add	funct3, #storetab
 
 		'' extract s-type immediate
-		mov	temp, opcode
-		shr	temp, #7
-		and	temp, #$1f
-		sar	opcode, #20
-		andn	opcode, #$1f
-		or	opcode, temp	' opcode has offset
+		call	#get_s_imm
 		add	rs1, opcode	' find address
 		jmp	funct3		' go do store
 
@@ -342,6 +354,47 @@ do_wrbyte
 		add	rs1, membase
 		wrbyte	dest, rs1
 		jmp	#nexti		' no writeback
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' implement conditional branches
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+condbranch
+		call	#getrs1
+		movs	:bfetch1, rs1
+		call	#getrs2
+		movs	:bfetch2, rs2
+:bfetch1	mov	rs1, 0-0
+:bfetch2	mov	rs2, 0-0
+		mov	funct3, opcode
+		shr	funct3, #12
+		call	#get_s_imm	' opcode now contains s-type immediate
+		test	opcode, #1 wc	' get low bit into carry
+		muxc	opcode, bit11	' copy up to bit 11
+		andn	opcode, #1	' clear low bit
+		add	opcode, pc
+		sub	opcode, #4	' opcode now has desired destination
+		shr	funct3, #1 wc
+	if_c	mov	temp, pc	' if low bit was set, invert sense
+	if_c	mov	pc, opcode
+	if_c	mov	opcode, temp
+
+		'' at this point, check for type of compares
+		'' C will be set for an unsigned compare, clear for signed
+		'' Z will be set for test ==, clear for test <
+		shr	funct3, #1 wc,wz	' check for signed compare
+	if_c	movi	docmp, #CMP_UNSIGNED
+	if_nc	movi	docmp, #CMP_SIGNED
+	if_nz	jmp	#jlt
+		call	#docmp
+	if_z	mov	pc, opcode
+		jmp	#nexti
+jlt
+		call	#docmp
+	if_b	mov	pc, opcode
+		jmp	#nexti
+docmp
+		cmp	rs1, rs2 wc, wz	' replaced with actual instruction above
+docmp_ret	ret
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
@@ -459,4 +512,4 @@ rs1		long	0
 rs2		long	0
 funct3		long	0
 
-		fit	$140	'$1F0 is whole thing
+		fit	$160	'$1F0 is whole thing

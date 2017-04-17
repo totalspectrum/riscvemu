@@ -96,7 +96,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-		call	#singlestep
+'''		call	#singlestep
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -342,10 +342,25 @@ storeop
 		add	rs1, opcode	' find address
 		jmp	funct3		' go do store
 
+iobase		long	$f0000000
 do_wrlong
+		test	rs1, iobase wz
+    if_nz	jmp	#doio
 		add	rs1, membase
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
+		'' handle special IO stuff
+doio
+		andn	rs1, iobase
+		shr	rs1, #2 wz
+    if_nz	jmp	#doiocog
+    		mov	newcmd, dest
+		call	#sendcmd
+		call	#waitcmdclear
+		jmp	#nexti
+doiocog
+		jmp	#illegalinstr
+		
 do_wrword
 		add	rs1, membase
 		wrword	dest, rs1
@@ -367,6 +382,7 @@ condbranch
 :bfetch2	mov	rs2, 0-0
 		mov	funct3, opcode
 		shr	funct3, #12
+		and	funct3, #7
 		call	#get_s_imm	' opcode now contains s-type immediate
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11
@@ -378,6 +394,9 @@ condbranch
 	if_c	mov	pc, opcode
 	if_c	mov	opcode, temp
 
+		mov	info1, opcode
+		mov	info2, funct3
+		
 		'' at this point, check for type of compares
 		'' C will be set for an unsigned compare, clear for signed
 		'' Z will be set for test ==, clear for test <
@@ -512,4 +531,4 @@ rs1		long	0
 rs2		long	0
 funct3		long	0
 
-		fit	$160	'$1F0 is whole thing
+		fit	$180	'$1F0 is whole thing

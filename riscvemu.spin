@@ -128,12 +128,16 @@ getrs1
 getrs1_ret	ret
 
 
-		'' math register operations
-regop
+getrs2
 		mov	rs2, opcode
 		sar	rs2, #20
 		and	rs2, #$1f
 		add	rs2, #x0
+getrs2_ret	ret
+
+		'' math register operations
+regop
+		call	#getrs2
 		movs	:fetchrs, rs2
 		movs	mathtab, #imp_addsub
 :fetchrs	mov	rs2, 0-0
@@ -296,9 +300,49 @@ do_rdlong
 		jmp	#write_and_nexti
 
 
-storeop
+storetab
+		jmp	#do_wrbyte
+		jmp	#do_wrword
+		jmp	#do_wrlong
 		jmp	#illegalinstr
 		
+storeop
+		call	#getrs2
+		movs	:set1, rs2
+		call	#getrs1
+		movs	:set2, rs1
+		mov	funct3, opcode
+:set1		mov	dest, 0-0	' set dest to value of rs2 (value to store)
+:set2		mov	rs1, 0-0	' set rs1 to address of memory
+		shr	funct3, #12
+		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
+	if_nz	jmp	#illegalinstr
+		and	funct3, #3
+		add	funct3, #storetab
+
+		'' extract s-type immediate
+		mov	temp, opcode
+		shr	temp, #7
+		and	temp, #$1f
+		sar	opcode, #20
+		andn	opcode, #$1f
+		or	opcode, temp	' opcode has offset
+		add	rs1, opcode	' find address
+		jmp	funct3		' go do store
+
+do_wrlong
+		add	rs1, membase
+		wrlong	dest, rs1
+		jmp	#nexti		' no writeback
+do_wrword
+		add	rs1, membase
+		wrword	dest, rs1
+		jmp	#nexti		' no writeback
+do_wrbyte
+		add	rs1, membase
+		wrbyte	dest, rs1
+		jmp	#nexti		' no writeback
+
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -415,4 +459,4 @@ rs1		long	0
 rs2		long	0
 funct3		long	0
 
-		fit	$120	'$1F0 is whole thing
+		fit	$140	'$1F0 is whole thing

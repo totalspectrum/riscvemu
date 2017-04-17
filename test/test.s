@@ -1,14 +1,16 @@
 	.text
 start:
 	j	next
-val1:	.long	-1
+val1:	.long	0x112288fe
 next:	
 	addi	x7, x0, 4		# get address of val1 into x7
-	lw	x8, 0(x7)
-	lb	x9, 0(x7)
-	lhu	x10, 2(x7)
+	lw	x8, 0(x7)		# get 112288fe into x8
+	lb	x9, 0(x7)		# get fffffffe into x9
+	lhu	x10, 2(x7)		# get 00001122 into x10
 	ori	x8, x0, 0x11
 	xori	x8, x8, 0x10	# leaves 1 in x8
+	sb	x8, 1(x7)
+	lw	x9, 0(x7)		# get 112201fe into x9
 	ori	x10, x0, 0x123
 	jal	x1, subr
 	lui	x9, 0x87654

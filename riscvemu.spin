@@ -55,15 +55,13 @@ opcodetab
 
 opcode0entry
 		jmp	#loadop		'' load
-
-'' these generally contain the PROPELLER opcode needed to
-'' implement the corresponding RISC-V instruction
-'' there are some special circumstances:
-''   the cmp based instructions (low bit 0); these need further
-''   expansion to implement slt / sltu
-'' 
+''
+'' table for "regular" math operations
+'' note that if bits 31..25 of the opcode == 1, we should use
+'' the "mul" table instead
+'' also note that
 mathtab
-{0}		jmp	#imp_add
+{0}		jmp	#imp_add	'' add or sub, based on imm field
 {1}		jmp	#imp_sll	'' shl
 {2}		jmp	#imp_slt	'' set if less than, signed
 {3}		jmp	#imp_sltu	'' set if less than, unsigned
@@ -71,6 +69,16 @@ mathtab
 {5}		jmp	#imp_shr	'' srli or srai, based on imm 
 {6}		jmp	#imp_or		'' ori
 {7}		jmp	#imp_and	'' andi
+
+multab
+{0}		jmp	#imp_mul
+{1}		jmp	#illegalinstr	'' mulh, not implemented
+{2}		jmp	#illegalinstr	'' mulhsu, not implemented
+{3}		jmp	#imp_muluh
+{4}		jmp	#imp_div
+{5}		jmp	#imp_divu
+{6}		jmp	#imp_rem
+{7}		jmp	#imp_remu
 
 init
 		mov	opcodetab, opcode0entry
@@ -96,7 +104,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-'''		call	#singlestep
+		call	#singlestep
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -141,12 +149,26 @@ getrs2
 		add	rs2, #x0
 getrs2_ret	ret
 
+
+		'' extract funct3 field
+getfunct3
+		mov	funct3, opcode
+		shr	funct3, #12
+		and	funct3, #7
+getfunct3_ret
+		ret
+
+mulbit		long	(1<<25)
+
 		'' math register operations
 regop
 		call	#getrs2
 		movs	:fetchrs, rs2
 		movs	mathtab, #imp_addsub
 :fetchrs	mov	rs2, 0-0
+		test	opcode, mulbit wz
+		mov	desth, #mathtab
+	if_nz	mov	desth, #multab
 		jmp	#domath
 		
 		'' math immediate operations
@@ -154,15 +176,19 @@ immediateop
 		movs	mathtab, #imp_add
 		mov	rs2, opcode
 		sar	rs2, #20
+		mov	desth, #mathtab
 
+		'' generic math routine
+		'' enter with rs2 having the decoded value of rs2
+		'' (register fetched if applicable)
+		'' and with desth containing the table to use
+		'' (generic mathtab, or multab)
 domath
 		call	#getrs1
 		movs	:exec1, rs1
-		mov	funct3, opcode
+		call	#getfunct3
 :exec1		mov	dest, 0-0		' load rs1 into dest
-		shr	funct3, #12
-		and	funct3, #7
-		add	funct3, #mathtab	' funct3 pts at instruction
+		add	funct3, desth		' funct3 pts at instruction
 
 		'' actually execute the decoded instruction here
 		jmp	funct3
@@ -277,9 +303,8 @@ loadtab
 loadop
 		call	#getrs1
 		movs	:set, rs1
-		mov	funct3, opcode
+		call	#getfunct3
 :set		mov	dest, 0-0	' set dest to value of rs1
-		shr	funct3, #12
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
 		and	funct3, #3
 		add	funct3, #loadtab
@@ -328,10 +353,9 @@ storeop
 		movs	:set1, rs2
 		call	#getrs1
 		movs	:set2, rs1
-		mov	funct3, opcode
+		call	#getfunct3
 :set1		mov	dest, 0-0	' set dest to value of rs2 (value to store)
 :set2		mov	rs1, 0-0	' set rs1 to address of memory
-		shr	funct3, #12
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
 	if_nz	jmp	#illegalinstr
 		and	funct3, #3
@@ -380,9 +404,7 @@ condbranch
 		movs	:bfetch2, rs2
 :bfetch1	mov	rs1, 0-0
 :bfetch2	mov	rs2, 0-0
-		mov	funct3, opcode
-		shr	funct3, #12
-		and	funct3, #7
+		call	#getfunct3
 		call	#get_s_imm	' opcode now contains s-type immediate
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11
@@ -394,9 +416,6 @@ condbranch
 	if_c	mov	pc, opcode
 	if_c	mov	opcode, temp
 
-		mov	info1, opcode
-		mov	info2, funct3
-		
 		'' at this point, check for type of compares
 		'' C will be set for an unsigned compare, clear for signed
 		'' Z will be set for test ==, clear for test <
@@ -414,6 +433,95 @@ jlt
 docmp
 		cmp	rs1, rs2 wc, wz	' replaced with actual instruction above
 docmp_ret	ret
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' unsigned multiply rs1 * rs2 -> (dest, desth)
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+imp_mul
+		call	#umul
+		jmp	#write_and_nexti
+imp_muluh	call	#umul
+		mov	dest, desth
+		jmp	#write_and_nexti
+
+imp_divu	call	#udiv
+		jmp	#write_and_nexti
+imp_remu	call	#udiv
+		mov	dest, desth
+		jmp	#write_and_nexti
+
+imp_rem
+		mov	divflags, #4
+		jmp	#dodiv
+imp_div
+		mov	divflags, #0
+dodiv
+		abs	dest, dest wc
+		muxc	divflags, #1
+		abs	rs2, rs2 wc
+		muxc	divflags, #2
+		call	#udiv
+		test	divflags, #4 wc	' do we want remainder?
+	if_c	jmp	#dorem
+		test	divflags, #3 wc	' if both have same sign parity will be even, so c 0
+	if_c	neg	dest, dest
+		jmp	#write_and_nexti
+dorem
+		mov	desth, dest
+		test	divflags, #1 wc	' remainder has sign of rs1
+	if_c	neg	dest, dest
+		jmp	#write_and_nexti
+
+umul
+		mov	rs1, dest
+		mov	dest, #0
+		mov	desth, #0
+		mov	temp, #0
+umul_loop
+		shr	rs2, #1 wc, wz
+  if_nc		jmp	#umul_skip_add
+  		add	dest, rs1 wc
+		addx	desth, temp
+umul_skip_add
+  		add	rs1, rs1 wc
+		addx	temp, temp
+  if_nz		jmp	#umul_loop
+
+umul_ret	ret
+
+		'' calculate dest / rs2; result in dest, remainder in desth
+udiv
+		mov	rs1, dest
+		cmp	rs2, #0 wz
+  if_z		jmp	#div_by_zero
+
+  		mov	dest, #0
+		mov	desth, #1	' shift count
+		
+  		' align divisor to leftmost bit
+:alignlp	
+		shl	rs2, #1	 wc
+		cmp	rs2, rs1 wz, wc
+  if_c_or_z	add	desth, #1
+  if_c		jmp	#:alignlp
+		
+
+:div_loop
+		shr	rs2, #1		' halve divison
+		cmpsub	rs1, rs2 wc
+		rcl	dest, #1
+		shr	rs2, #1
+		djnz	desth, #:div_loop
+		mov	desth, rs2
+
+		mov	info1, dest
+		mov	info2, desth
+udiv_ret	ret
+
+div_by_zero
+		neg	dest, #1
+		mov	desth, rs1
+		jmp	udiv_ret
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
@@ -509,6 +617,7 @@ i2s7		long	(2<<23) | 7
 
 temp		long 0
 dest		long 0
+desth		long 0	' high word of result for mul/div
 dbgreg_addr	long 0	' address where registers go in HUB during debug
 cmd_addr	long 0	' address of HUB command word
 membase		long 0	' base of emulated RAM
@@ -530,5 +639,6 @@ rd		long	0
 rs1		long	0
 rs2		long	0
 funct3		long	0
+divflags	long	0
 
-		fit	$180	'$1F0 is whole thing
+		fit	$1c0	'$1F0 is whole thing

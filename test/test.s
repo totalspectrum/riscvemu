@@ -1,23 +1,12 @@
 	.text
 start:
-	la	x8, msg
-	li	x10, 0xf0000000
-repeat:
-	lbu	x9, 0(x8)
-	beq	x9, x0, here
-	addi	x8, x8, 1
-	sll	x3, x9, 4
-	ori	x3, x3, 0xf
-	sw	x3, 0(x10)
-	j	repeat
-	
-here:	jal	x0, here
-	
-subr:
-	andi	x10, x10, 0xFF
+	li	x10, 5
+	li	x11, 4
+	mul	x8, x10, x11
+	li	x10, 13
+	divu	x8, x10, x11
+	remu	x9, x10, x11
 	sub	x10, x0, x10
-	jalr	x0, x1
-	
-	.data
-msg:	.ascii "hi\r\n"
+	div	x8, x10, x11
+	rem	x9, x10, x11
 	.long	0

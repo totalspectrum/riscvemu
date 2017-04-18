@@ -92,6 +92,8 @@ init
 		rdlong	pc, temp
 		add	temp, #4
 		add	pc, membase
+		mov	x0+2,membase
+		add	x0+2,memsize
 		rdlong	dbgreg_addr, temp
 		jmp	#nexti
 		
@@ -104,7 +106,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-		call	#singlestep
+'''		call	#singlestep
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -326,10 +328,20 @@ do_rdword
 	if_z	sar	dest, #16
 		jmp	#write_and_nexti
 do_rdlong
+		test	dest, iobase wz
+	if_nz	jmp	read_io
 		add	dest, membase
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
+read_io
+		'' read from COG memory
+		shr	dest, #2	' convert from bytes to longs
+		movs	:readcog, dest
+		nop
+:readcog	mov	dest, 0-0
+		jmp	#write_and_nexti
+		
 		''
 		'' re-order bits of opcode so that it is
 		'' an s-type immediate value
@@ -369,12 +381,12 @@ storeop
 iobase		long	$f0000000
 do_wrlong
 		test	rs1, iobase wz
-    if_nz	jmp	#doio
+    if_nz	jmp	#write_io
 		add	rs1, membase
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
 		'' handle special IO stuff
-doio
+write_io
 		andn	rs1, iobase
 		shr	rs1, #2 wz
     if_nz	jmp	#doiocog
@@ -383,8 +395,11 @@ doio
 		call	#waitcmdclear
 		jmp	#nexti
 doiocog
-		jmp	#illegalinstr
-		
+		movd	:writecog, rs1
+		nop
+:writecog	mov	0-0, dest
+		jmp	#nexti
+
 do_wrword
 		add	rs1, membase
 		wrword	dest, rs1

@@ -29,15 +29,8 @@ int main (int argc,  char* argv[])
 	unsigned int endTime;
         unsigned int executionTime;
 
-/*
-        startTime = *timer;
-	while (1)
-        {
-                endTime = *timer;
-                executionTime = (endTime - startTime) / (CLOCK_FREQUENCY / 1000);
-		iprintf("Timer = %u\n", executionTime);
-        }
-*/
+        iprintf("fibo test version 10 (dec %u)(hex %x)\n", 10, 10, 10);
+        
         for (n = 0; n <= 26; n++)
 	{
                 iprintf("fibo(%02d) = ", n);

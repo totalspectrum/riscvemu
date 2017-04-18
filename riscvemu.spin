@@ -510,27 +510,26 @@ udiv
 		cmp	rs2, #0 wz
   if_z		jmp	#div_by_zero
 
-  		mov	dest, #0
-		mov	desth, #1	' shift count
+		neg	desth, #1 wc	' shift count
 		
   		' align divisor to leftmost bit
 :alignlp	
-		shl	rs2, #1	 wc
-		cmp	rs2, rs1 wz, wc
-  if_c_or_z	add	desth, #1
-  if_c		jmp	#:alignlp
-		
+		rcl	rs2, #1	 wc
+  if_nc		djnz	desth, #:alignlp
+		rcr	rs2, #1			' restore the 1 bit we just nuked
+		neg	desth, desth		' shift count (we started at -1 and counted down)
 
+  		mov	dest, #0
 :div_loop
-		shr	rs2, #1		' halve divison
 		cmpsub	rs1, rs2 wc
 		rcl	dest, #1
 		shr	rs2, #1
 		djnz	desth, #:div_loop
-		mov	desth, rs2
-
+		
+		mov	desth, rs1
 		mov	info1, dest
 		mov	info2, desth
+
 udiv_ret	ret
 
 div_by_zero
@@ -656,4 +655,4 @@ rs2		long	0
 funct3		long	0
 divflags	long	0
 
-		fit	$1c0	'$1F0 is whole thing
+		fit	$1c8	'$1F0 is whole thing

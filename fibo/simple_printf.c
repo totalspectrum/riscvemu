@@ -13,14 +13,14 @@
 
 #undef putchar
 #define putchar(c) putbyte(c)
-#define UART_TX 0x80000000
+#define UART_TX 0x80000000U
 
 int putbyte(int c)
 {
     if (c == '\n') {
-        *( (unsigned int *)UART_TX) = ('\r'<<4)|0xf;
+        *( (volatile unsigned int *)UART_TX) = ('\r'<<4)|0xf;
     }
-    *( (unsigned int *)UART_TX) = (c<<4)|0xf;
+    *( (volatile unsigned int *)UART_TX) = (c<<4)|0xf;
 }
 
 

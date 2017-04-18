@@ -55,6 +55,8 @@ PUB demo | cmd, arg
       waitforkey
     elseif (cmd == 2)	' illegal instruction
       ser.str(string("*** illegal instruction ***", 13, 10))
+      dumpregs
+      waitforkey
     elseif (cmd == $f) ' write a byte
       ser.tx(arg)
     cmdreg := 0

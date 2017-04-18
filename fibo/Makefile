@@ -6,7 +6,7 @@ LD=$(TOOLS)riscv32-unknown-elf-ld
 CC=$(TOOLS)riscv32-unknown-elf-gcc
 CFLAGS=-Os -march=rv32im
 
-OBJS=start.o fibo.o simple_printf.o
+OBJS=start.o fibo.o simple_printf.o getcnt.o
 
 fibo.bin: $(OBJS)
 	$(TOOLS)riscv32-unknown-elf-ld -T flat.ld -o fibo.elf $(OBJS)

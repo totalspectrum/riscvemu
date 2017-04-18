@@ -127,7 +127,9 @@ nexti
 
 		'' come here for illegal instructions
 illegalinstr
+		call	#dumpregs
 		mov	newcmd, #2	' signal illegal instruction
+		call	#waitcmdclear
 		call	#sendcmd
 		jmp	#nexti
 
@@ -328,13 +330,16 @@ do_rdword
 	if_z	sar	dest, #16
 		jmp	#write_and_nexti
 do_rdlong
+		mov	info1, #$C1
+		mov	info2, dest		
 		test	dest, iobase wz
-	if_nz	jmp	read_io
+	if_nz	jmp	#read_io
 		add	dest, membase
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
 read_io
+		mov	info1, #$C2
 		'' read from COG memory
 		shr	dest, #2	' convert from bytes to longs
 		movs	:readcog, dest
@@ -527,8 +532,6 @@ udiv
 		djnz	desth, #:div_loop
 		
 		mov	desth, rs1
-		mov	info1, dest
-		mov	info2, desth
 
 udiv_ret	ret
 

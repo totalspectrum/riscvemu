@@ -1,6 +1,9 @@
-''
-'' serial port demo
-''
+{{
+   RISC-V Emulator test harness
+   Copyright 2017 Total Spectrum Software Inc.
+   Terms of use: MIT License (see the file LICENSE.txt)
+}} 
+
 CON
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
@@ -10,7 +13,7 @@ OBJ
   proc: "riscvemu"
 
 CON
-  memsize = 16*1024
+  memsize = 16*1024		' size of RAM given to the RISC-V chip
   
 VAR
   ' regs are 32 general purpose registers, followed by pc and debug

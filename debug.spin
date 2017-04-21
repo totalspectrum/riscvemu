@@ -9,7 +9,11 @@ CON
   _clkmode = xtal1 + pll16x
    
 OBJ
+#ifdef __SPIN2CPP__
+  ser: "SimpleSerial"
+#else
   ser: "FullDuplexSerial"
+#endif
   proc: "riscvemu"
 
 CON

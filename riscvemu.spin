@@ -31,10 +31,6 @@
    
 }}
 
-CON
-  CMP_UNSIGNED = %100001_110	' PASM opcode for cmp   wc,wz
-  CMP_SIGNED   = %110000_110	' PASM opcode for cmps  wc,wz
-  
 VAR
   long cog			' 1 + the cog id of the cog running the emulator
   
@@ -311,11 +307,8 @@ jal
 		jmp	#write_and_nexti
 
 jalr
-		mov	rs1, opcode
+		call	#getrs1
 		sar	opcode, #20	' get offset
-		shr	rs1, #15
-		and	rs1, #$1f
-		add	rs1, #x0
 		movs	:jalfetch, rs1
 		sub	pc, membase
 		mov	dest, pc	' save old pc
@@ -473,19 +466,21 @@ condbranch
 		'' C will be set for an unsigned compare, clear for signed
 		'' Z will be set for test ==, clear for test <
 		shr	funct3, #1 wc,wz	' check for signed compare
-	if_c	movi	docmp, #CMP_UNSIGNED
-	if_nc	movi	docmp, #CMP_SIGNED
-	if_nz	jmp	#jlt
-		call	#docmp
-	if_z	mov	pc, opcode
-		jmp	#nexti
-jlt
-		call	#docmp
+	if_z	jmp	#testeq
+	if_nc	jmp	#testlt
+testltu
+		cmp	rs1, rs2 wc,wz
 	if_b	mov	pc, opcode
 		jmp	#nexti
-docmp
-		cmp	rs1, rs2 wc, wz	' replaced with actual instruction above
-docmp_ret	ret
+testlt
+		cmps	rs1, rs2 wc,wz
+	if_b	mov	pc, opcode
+		jmp	#nexti
+testeq
+		cmp	rs1, rs2 wc,wz
+	if_z	mov	pc, opcode
+		jmp	#nexti
+
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' unsigned multiply rs1 * rs2 -> (dest, desth)

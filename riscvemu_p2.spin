@@ -112,7 +112,7 @@ multab
 
 init
 		mov	opcodetab, opcode0entry
-		mov	temp, pa
+		mov	temp, ptra
 		rdlong	cmd_addr, temp
 		add	temp, #4
 		rdlong	membase, temp
@@ -122,7 +122,7 @@ init
 		rdlong	pc, temp
 		add	temp, #4
 		add	pc, membase
-		mov	x0+2,membase
+		mov	x0+2,membase	' set up stack pointer
 		add	x0+2,memsize
 		rdlong	dbgreg_addr, temp
 		jmp	#nexti
@@ -607,34 +607,23 @@ waitcmdclear_ret
 ' "hubaddr"   is the HUB memory address
 ' "cogaddr"   is the COG memory address
 ' "hubcnt"    is the number of *bytes* to transfer
-' '
-' The idea is based on code posted by Kuroneko in the
-' "Fastest possible memory transfer" thread on the
-' Parallax forums, modified slightly for arbitrary buffers.
-' Note that the number of longs must be a multiple of 2
 '------------------------------------------------------------------------------
-
-' NOTE: the instructions at lbuf0 and lbuf1 can be destroyed if
-' we count down below 0 (where the cache starts) so we have to
-' refresh them each time
-' we have to set up for read/write anyway, so this isn't too big
-' a deal
-
-wrins		wrlong	0-0, hubaddr
 
 cogxfr_read
 		setd	.rdins, cogaddr
 		add	hubcnt, #3
-		shr	hubcnt, #3	' count of longs
-		setq2	hubcnt
+		shr	hubcnt, #2	' count of longs
+		sub	hubcnt, #1
+		setq	hubcnt
 .rdins		rdlong	0-0, hubaddr
 		ret
 		
 cogxfr_write
 		setd	.rdins, cogaddr
 		add	hubcnt, #3
-		shr	hubcnt, #3	' count of longs
-		setq2	hubcnt
+		shr	hubcnt, #2	' count of longs
+		sub	hubcnt, #1
+		setq	hubcnt
 .rdins		wrlong	0-0, hubaddr
 		ret
 

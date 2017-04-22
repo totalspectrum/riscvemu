@@ -107,22 +107,22 @@ PUB hex(val, digits) | shft, x
 PUB rx | waitcycles, cycles, mask, val, x
   mask := rxmask
   cycles := bitcycles
-  DIRA &= !mask  ' set for input
+  DIRB &= !mask  ' set for input
   '' wait for start bit
   repeat
-    x := INA
+    x := INB
   while ( (x & mask) <> 0 )
   val := $0
   waitcycles := CNT + (cycles >> 1)  '' sync for one half bit
   repeat 8
       val := val >> 1
       waitcnt(waitcycles += cycles)
-      x := INA
+      x := INB
       if ( (x & mask) <> 0 )
         val |= $80
   '' wait for stop bit?
   repeat
-    x := INA
+    x := INB
   while ( (x & mask) <> mask )
   return val
 

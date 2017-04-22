@@ -9,12 +9,13 @@ CON
   _clkmode = xtal1 + pll16x
    
 OBJ
-#ifdef __SPIN2CPP__
+#ifdef __P2__
   ser: "SimpleSerial"
+  proc: "riscvemu_p2"
 #else
   ser: "FullDuplexSerial"
-#endif
   proc: "riscvemu"
+#endif
 
 CON
   memsize = 16*1024		' size of RAM given to the RISC-V chip

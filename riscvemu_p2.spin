@@ -133,7 +133,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-		call	#checkdebug
+'''		call	#checkdebug
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -463,7 +463,7 @@ csrrc
 		mov	info2, opcode
 		mov	dest, #0
 		cmp	opcode, ##$C00 wz, wc
-	if_nz	jmp	#write_and_nexti
+	if_nz	jmp	#illegalinstr
 		getct	dest
 		jmp	#write_and_nexti
 
@@ -568,34 +568,17 @@ umul_ret	ret
 
 		'' calculate dest / rs2; result in dest, remainder in desth
 udiv
-		mov	rs1, dest
-		cmp	rs2, #0 wz
-  if_z		jmp	#div_by_zero
-
-		neg	desth, #1 wc	' shift count
-		
-  		' align divisor to leftmost bit
-.alignlp	
-		rcl	rs2, #1	 wc
-  if_nc		djnz	desth, #.alignlp
-		rcr	rs2, #1			' restore the 1 bit we just nuked
-		neg	desth, desth		' shift count (we started at -1 and counted down)
-
-  		mov	dest, #0
-.div_loop
-		cmpsub	rs1, rs2 wc
-		rcl	dest, #1
-		shr	rs2, #1
-		djnz	desth, #.div_loop
-		
-		mov	desth, rs1
-
+		tjz	rs2, #div_by_zero
+		setq	#0		' set high 64 bits
+		qdiv	dest, rs2	' dest/rs2
+		getqx	dest  		' quotient
+		getqy	desth		' remainder
 udiv_ret	ret
 
 div_by_zero
 		neg	dest, #1
 		mov	desth, rs1
-		jmp	udiv_ret
+		jmp	#udiv_ret
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines

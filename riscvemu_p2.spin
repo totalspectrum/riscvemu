@@ -169,7 +169,6 @@ getrs1
 		mov	rs1, opcode
 		shr	rs1, #15
 		and	rs1, #$1f
-		add	rs1, #x0
 getrs1_ret	ret
 
 
@@ -177,7 +176,6 @@ getrs2
 		mov	rs2, opcode
 		sar	rs2, #20
 		and	rs2, #$1f
-		add	rs2, #x0
 getrs2_ret	ret
 
 
@@ -195,7 +193,7 @@ mulbit		long	(1<<25)
 regop
 		call	#getrs2
 		sets	mathtab, #imp_addsub
-		alts	rs2, #0
+		alts	rs2, #x0
 		mov	rs2, 0-0
 		test	opcode, mulbit wz
 		mov	desth, #mathtab
@@ -217,7 +215,7 @@ immediateop
 domath
 		call	#getrs1
 		call	#getfunct3
-		alts	rs1, #0
+		alts	rs1, #x0
 		mov	dest, 0-0		' load rs1 into dest
 		add	funct3, desth		' funct3 pts at instruction
 
@@ -309,7 +307,7 @@ jalr
 		sar	opcode, #20	' get offset
 		sub	pc, membase
 		mov	dest, pc	' save old pc
-		alts	rs1, #0
+		alts	rs1, #x0
 		mov	pc, 0-0		' fetch rs1 value
 		add	pc, membase
 		add	pc, opcode
@@ -331,7 +329,7 @@ loadtab
 loadop
 		call	#getrs1
 		call	#getfunct3
-		alts	rs1, #0
+		alts	rs1, #x0
     		mov	dest, 0-0	' set dest to value of rs1
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
 		and	funct3, #3
@@ -365,7 +363,6 @@ read_io
 		'' read from COG memory
 		shr	dest, #2	' convert from bytes to longs
 		and	dest, #$1ff	' mask off COG memory
-		mov	info1, dest
 		alts	dest, #0
         	mov	dest, 0-0
 		mov	info2, dest
@@ -393,9 +390,9 @@ storeop
 		call	#getrs2
 		call	#getrs1
 		call	#getfunct3
-		alts	rs2, #0
+		alts	rs2, #x0
 		mov	dest, 0-0	' set dest to value of rs2 (value to store)
-		alts	rs1, #0
+		alts	rs1, #x0
      		mov	rs1, 0-0	' set rs1 to address of memory
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
 	if_nz	jmp	#illegalinstr
@@ -473,9 +470,9 @@ csrrc
 condbranch
 		call	#getrs1
 		call	#getrs2
-		alts	rs1, #0
+		alts	rs1, #x0
 		mov	rs1, 0-0
-		alts	rs2, #0
+		alts	rs2, #x0
         	mov	rs2, 0-0
 		call	#getfunct3
 		call	#get_s_imm	' opcode now contains s-type immediate

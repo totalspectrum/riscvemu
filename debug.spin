@@ -83,7 +83,10 @@ PUB demo | cmd, arg, c
       dumpregs
       waitforkey
     elseif (cmd == $f) ' write a byte
-      ser.tx(arg)
+      if (arg == $a) ' newline
+        nl
+      else
+        ser.tx(arg)
     cmdreg := 0
 
 PRI nl

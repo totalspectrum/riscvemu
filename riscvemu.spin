@@ -77,7 +77,7 @@ opcodetab
 {19}		jmp	#jalr
 {1A}		jmp	#illegalinstr
 {1B}		jmp	#jal
-{1C}		jmp	#illegalinstr	' system
+{1C}		jmp	#sysinstr	' system
 {1D}		jmp	#illegalinstr
 {1E}		jmp	#illegalinstr	' custom3
 {1F}		jmp	#illegalinstr
@@ -135,7 +135,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-		call	#checkdebug
+'''		call	#checkdebug
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -441,6 +441,38 @@ do_wrbyte
 		jmp	#nexti		' no writeback
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' implement csrrw instruction
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+sysinstrtab
+		jmp	#illegalinstr
+		jmp	#csrrw
+		jmp	#csrrs
+		jmp	#csrrc
+		jmp	#illegalinstr
+		jmp	#illegalinstr
+		jmp	#illegalinstr
+		jmp	#illegalinstr
+sysinstr
+		call	#getrs1
+		call	#getfunct3
+		shr	opcode, #20	' extract CSR address
+		add	funct3, #sysinstrtab
+		jmp	funct3
+
+csrrw
+csrrs
+csrrc
+		mov	info1, #$C5
+		mov	info2, opcode
+		mov	dest, #0
+		cmp	opcode, cycle_const wz, wc
+	if_nz	jmp	#illegalinstr
+		mov	dest, CNT
+		jmp	#write_and_nexti
+
+cycle_const	long	$C00
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 condbranch
@@ -573,22 +605,33 @@ div_by_zero
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 checkdebug
-''		tjz	stepcount, #checkdebug_ret
-''		djnz	stepcount, #checkdebug_ret
+		tjz	stepcount, #checkdebug_ret
+		djnz	stepcount, #checkdebug_ret
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
+		call	#readregs	' read back (possibly modified) registers
 checkdebug_ret	ret
 		
 dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #36*4
+		mov	hubcnt, #38*4
 		sub	pc, membase	' adjust for VM
 		call	#cogxfr_write
 		add	pc, membase	' adjust for VM
 dumpregs_ret
+		ret
+
+readregs
+		mov	cogaddr, #x0
+		mov	hubaddr, dbgreg_addr
+		mov	hubcnt, #38*4
+		call	#cogxfr_read
+		add	pc, membase	' adjust for VM
+		mov	x0, #0		'
+readregs_ret
 		ret
 
 newcmd		long 0
@@ -682,7 +725,7 @@ opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info
 stepcount	long	1	' start up in single step
-until		long	0
+rununtil	long	0
 
 rd		long	0
 rs1		long	0
@@ -690,4 +733,4 @@ rs2		long	0
 funct3		long	0
 divflags	long	0
 
-		fit	$1c8	'$1F0 is whole thing
+		fit	$1f0	'$1F0 is whole thing

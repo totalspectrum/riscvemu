@@ -35,8 +35,9 @@ VAR
 
 DAT
 
+dummy
+	long 1	'' force long alignment
 progmem
-	long	'' force long alignment
 	file	"test.bin"
 padding
 	byte	0[memsize - (@padding - @progmem)]
@@ -44,14 +45,15 @@ padding
 PUB demo | cmd, arg
   ser.start(31, 30, 0, 115200)
   ser.str(string("Processor emulation", 13, 10))
-  ser.str(string("starting emulation..."))
+  ser.str(string("starting emulation; base="))
+  ser.hex(@progmem, 8)
   params[0] := @cmdreg
   params[1] := @progmem ' base of memory
   params[2] := memsize
   params[3] := 0	' initial PC (relative to base)
   params[4] := @regs	' debug address
   proc.start(@params)
-  ser.str(string("ok"))
+  ser.str(string(" ok"))
   nl
   repeat
     repeat
@@ -71,7 +73,7 @@ PUB demo | cmd, arg
 
 PRI nl
   ser.tx(13)
-  ser.tx(10)
+''  ser.tx(10)
 
 '' print 8 registers starting at n
 PRI printregs(msg, n) | j

@@ -1,4 +1,3 @@
-#define SINGLE_STEP
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017 Total Spectrum Software Inc.
@@ -46,72 +45,70 @@ PUB stop
 DAT
 		org 0
 enter
+		jmp	#init
 opcodetab
-{00}		jmp	#init		' replaced with load instruction
-{01}		jmp	#illegalinstr	' float load
-{02}		jmp	#illegalinstr	' custom0
-{03}		jmp	#illegalinstr	' fence
-{04}		jmp	#immediateop	' math immediate
-{05}		jmp	#auipc		' auipc
-{06}		jmp	#illegalinstr	' wide math imm
-{07}		jmp	#illegalinstr	' ???
+{00}		jmp	#\loadop	' load
+{01}		jmp	#\illegalinstr	' float load
+{02}		jmp	#\illegalinstr	' custom0
+{03}		jmp	#\illegalinstr	' fence
+{04}		jmp	#\immediateop	' math immediate
+{05}		jmp	#\auipc		' auipc
+{06}		jmp	#\illegalinstr	' wide math imm
+{07}		jmp	#\illegalinstr	' ???
 
-{08}		jmp	#storeop	' store
-{09}		jmp	#illegalinstr	' float store
-{0A}		jmp	#illegalinstr	' custom1
-{0B}		jmp	#illegalinstr	' atomics
-{0C}		jmp	#regop		' math reg
-{0D}		jmp	#lui		' lui
-{0E}		jmp	#illegalinstr	' wide math reg
-{0F}		jmp	#illegalinstr	' ???
+{08}		jmp	#\storeop	' store
+{09}		jmp	#\illegalinstr	' float store
+{0A}		jmp	#\illegalinstr	' custom1
+{0B}		jmp	#\illegalinstr	' atomics
+{0C}		jmp	#\regop		' math reg
+{0D}		jmp	#\lui		' lui
+{0E}		jmp	#\illegalinstr	' wide math reg
+{0F}		jmp	#\illegalinstr	' ???
 
-{10}		jmp	#illegalinstr
-{11}		jmp	#illegalinstr
-{12}		jmp	#illegalinstr
-{13}		jmp	#illegalinstr
-{14}		jmp	#illegalinstr
-{15}		jmp	#illegalinstr
-{16}		jmp	#illegalinstr	' custom2
-{17}		jmp	#illegalinstr
+{10}		jmp	#\illegalinstr
+{11}		jmp	#\illegalinstr
+{12}		jmp	#\illegalinstr
+{13}		jmp	#\illegalinstr
+{14}		jmp	#\illegalinstr
+{15}		jmp	#\illegalinstr
+{16}		jmp	#\illegalinstr	' custom2
+{17}		jmp	#\illegalinstr
 
-{18}		jmp	#condbranch	' conditional branch
-{19}		jmp	#jalr
-{1A}		jmp	#illegalinstr
-{1B}		jmp	#jal
-{1C}		jmp	#illegalinstr	' system
-{1D}		jmp	#illegalinstr
-{1E}		jmp	#illegalinstr	' custom3
-{1F}		jmp	#illegalinstr
+{18}		jmp	#\condbranch	' conditional branch
+{19}		jmp	#\jalr
+{1A}		jmp	#\illegalinstr
+{1B}		jmp	#\jal
+{1C}		jmp	#\sysinstr	' system
+{1D}		jmp	#\illegalinstr
+{1E}		jmp	#\illegalinstr	' custom3
+{1F}		jmp	#\illegalinstr
 
-opcode0entry
-		jmp	#loadop		'' load
 ''
 '' table for "regular" math operations
 '' note that if bits 31..25 of the opcode == 1, we should use
 '' the "mul" table instead
 '' also note that
 mathtab
-{0}		jmp	#imp_add	'' add or sub, based on imm field
-{1}		jmp	#imp_sll	'' shl
-{2}		jmp	#imp_slt	'' set if less than, signed
-{3}		jmp	#imp_sltu	'' set if less than, unsigned
-{4}		jmp	#imp_xor	'' xori
-{5}		jmp	#imp_shr	'' srli or srai, based on imm 
-{6}		jmp	#imp_or		'' ori
-{7}		jmp	#imp_and	'' andi
+{0}		jmp	#\imp_add	'' add or sub, based on imm field
+{1}		jmp	#\imp_sll	'' shl
+{2}		jmp	#\imp_slt	'' set if less than, signed
+{3}		jmp	#\imp_sltu	'' set if less than, unsigned
+{4}		jmp	#\imp_xor	'' xori
+{5}		jmp	#\imp_shr	'' srli or srai, based on imm 
+{6}		jmp	#\imp_or		'' ori
+{7}		jmp	#\imp_and	'' andi
 
 multab
-{0}		jmp	#imp_mul
-{1}		jmp	#illegalinstr	'' mulh, not implemented
-{2}		jmp	#illegalinstr	'' mulhsu, not implemented
-{3}		jmp	#imp_muluh
-{4}		jmp	#imp_div
-{5}		jmp	#imp_divu
-{6}		jmp	#imp_rem
-{7}		jmp	#imp_remu
+{0}		jmp	#\imp_mul
+{1}		jmp	#\illegalinstr	'' mulh, not implemented
+{2}		jmp	#\illegalinstr	'' mulhsu, not implemented
+{3}		jmp	#\imp_muluh
+{4}		jmp	#\imp_div
+{5}		jmp	#\imp_divu
+{6}		jmp	#\imp_rem
+{7}		jmp	#\imp_remu
 
 init
-		mov	opcodetab, opcode0entry
 		mov	temp, ptra
 		rdlong	cmd_addr, temp
 		add	temp, #4
@@ -136,9 +133,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-#ifdef SINGLE_STEP
-		call	#singlestep
-#endif
+'''		call	#singlestep
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -155,8 +150,8 @@ nexti
 		shr	temp, #2
 		and	temp, #$1f
 		add	temp, #opcodetab
-		jmp	temp		'' jump to instruction decode
-
+		jmp	temp		'' jump to instruction
+		
 		'' come here for illegal instructions
 illegalinstr
 		call	#dumpregs
@@ -213,7 +208,7 @@ immediateop
 		mov	rs2, opcode
 		sar	rs2, #20
 		mov	desth, #mathtab
-
+		
 		'' generic math routine
 		'' enter with rs2 having the decoded value of rs2
 		'' (register fetched if applicable)
@@ -251,7 +246,7 @@ imp_slt		cmps	dest, rs2 wz,wc
 imp_sltu	cmp	dest, rs2 wz,wc
 		jmp	#imp_slt+1
 imp_xor
-		xor	dest, rs2	' FIXME
+		xor	dest, rs2
 		jmp	#write_and_nexti
 imp_shr
 		'' depending on opcode we do sar or shr
@@ -328,9 +323,9 @@ jalr
 ' the load; the S field is 0 for unsigned load, 1 for signed
 
 loadtab
-		jmp	#do_rdbyte
-		jmp	#do_rdword
-		jmp	#do_rdlong
+		jmp	#\do_rdbyte
+		jmp	#\do_rdword
+		jmp	#\do_rdlong
 		jmp	#illegalinstr
 		
 loadop
@@ -359,8 +354,7 @@ do_rdword
 	if_z	sar	dest, #16
 		jmp	#write_and_nexti
 do_rdlong
-		mov	info1, #$C1
-		mov	info2, dest		
+		mov	info1, #$aa
 		test	dest, iobase wz
 	if_nz	jmp	#read_io
 		add	dest, membase
@@ -368,11 +362,13 @@ do_rdlong
 		jmp	#write_and_nexti
 
 read_io
-		mov	info1, #$C2
 		'' read from COG memory
 		shr	dest, #2	' convert from bytes to longs
+		and	dest, #$1ff	' mask off COG memory
+		mov	info1, dest
 		alts	dest, #0
         	mov	dest, 0-0
+		mov	info2, dest
 		jmp	#write_and_nexti
 		
 		''
@@ -442,9 +438,41 @@ do_wrbyte
 		jmp	#nexti		' no writeback
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' implement csrrw instruction
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+sysinstrtab
+		jmp	#\illegalinstr
+		jmp	#\csrrw
+		jmp	#\csrrs
+		jmp	#\csrrc
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+sysinstr
+		call	#getrs1
+		call	#getfunct3
+		shr	opcode, #20	' extract CSR address
+		add	funct3, #sysinstrtab
+		jmp	funct3
+
+csrrw
+csrrs
+csrrc
+		mov	info1, #$C5
+		mov	info2, opcode
+		mov	dest, #0
+		cmp	opcode, ##$C00 wz, wc
+	if_nz	jmp	#write_and_nexti
+		getct	dest
+		jmp	#write_and_nexti
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 condbranch
+		call	#getrs1
+		call	#getrs2
 		alts	rs1, #0
 		mov	rs1, 0-0
 		alts	rs2, #0
@@ -468,6 +496,8 @@ condbranch
 	if_z	jmp	#testeq
 	if_nc	jmp	#testlt
 testltu
+		mov	info1, rs1
+		mov	info2, rs2
 		cmp	rs1, rs2 wc,wz
 	if_b	mov	pc, opcode
 		jmp	#nexti
@@ -593,10 +623,10 @@ sendcmd
 		call	#waitcmdclear
 		wrlong	newcmd, cmd_addr
 sendcmd_ret	ret
-		
+
+t0		long	0
 waitcmdclear
-		rdlong	temp, cmd_addr
-		cmp	temp, #0 wz
+		rdlong	t0, cmd_addr wz
 	if_nz	jmp	#waitcmdclear	' far end is still processing last command
 waitcmdclear_ret
 		ret

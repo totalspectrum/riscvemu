@@ -17,9 +17,6 @@
 
 int putbyte(int c)
 {
-    if (c == '\n') {
-        *( (volatile unsigned int *)UART_TX) = ('\r'<<4)|0xf;
-    }
     *( (volatile unsigned int *)UART_TX) = (c<<4)|0xf;
 }
 

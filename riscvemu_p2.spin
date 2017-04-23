@@ -550,20 +550,9 @@ dorem
 		jmp	#write_and_nexti
 
 umul
-		mov	rs1, dest
-		mov	dest, #0
-		mov	desth, #0
-		mov	temp, #0
-umul_loop
-		shr	rs2, #1 wc, wz
-  if_nc		jmp	#umul_skip_add
-  		add	dest, rs1 wc
-		addx	desth, temp
-umul_skip_add
-  		add	rs1, rs1 wc
-		addx	temp, temp
-  if_nz		jmp	#umul_loop
-
+		qmul	dest, rs2
+		getqx	dest
+		getqy	desth
 umul_ret	ret
 
 		'' calculate dest / rs2; result in dest, remainder in desth

@@ -135,7 +135,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-'''		call	#singlestep
+		call	#checkdebug
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -572,12 +572,14 @@ div_by_zero
 ' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-singlestep
+checkdebug
+''		tjz	stepcount, #checkdebug_ret
+''		djnz	stepcount, #checkdebug_ret
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
-singlestep_ret	ret
+checkdebug_ret	ret
 		
 dumpregs
 		mov	cogaddr, #x0
@@ -679,6 +681,8 @@ pc		long	0
 opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info
+stepcount	long	1	' start up in single step
+until		long	0
 
 rd		long	0
 rs1		long	0

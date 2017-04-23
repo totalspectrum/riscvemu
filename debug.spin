@@ -22,7 +22,16 @@ CON
   
 VAR
   ' regs are 32 general purpose registers, followed by pc and debug
-  long regs[36]
+  ' debug info is:
+  ' 32 = pc
+  ' 33 = opcode
+  ' 34 = info1
+  ' 35 = info2
+  ' 36 = step count
+  ' 37-39 = reserved
+  
+  long regs[40]
+  
   ' parameter layout
   ' 0 = command register address
   ' 1 = base of memory
@@ -42,7 +51,7 @@ progmem
 padding
 	byte	0[memsize - (@padding - @progmem)]
 	
-PUB demo | cmd, arg
+PUB demo | cmd, arg, c
   ser.start(31, 30, 0, 115200)
   ser.str(string("Processor emulation", 13, 10))
   ser.str(string("starting emulation; base="))
@@ -62,7 +71,13 @@ PUB demo | cmd, arg
     arg := cmdreg >> 4
     if (cmd == 1)	' single step
       dumpregs
-      waitforkey
+      c := waitforkey
+      if (c == "b")
+        regs[36] := 100 '' big step
+      elseif (c == "c")
+        regs[36] := 0   ' continue, no stepping
+      else
+        regs[36] := 1
     elseif (cmd == 2)	' illegal instruction
       ser.str(string("*** illegal instruction ***", 13, 10))
       dumpregs
@@ -102,4 +117,4 @@ PRI waitforkey | c
    ser.str(string("*** press a key to continue ***"))
    c := ser.rx
    nl
-
+   return c

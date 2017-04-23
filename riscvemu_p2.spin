@@ -133,7 +133,7 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-'''		call	#singlestep
+		call	#checkdebug
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -601,23 +601,35 @@ div_by_zero
 ' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
-singlestep
+checkdebug
+		tjz	stepcount, #checkdebug_ret
+		djnz	stepcount, #checkdebug_ret
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
-singlestep_ret	ret
+		call	#readregs	' read new registers
+checkdebug_ret	ret
 		
 dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #36*4
+		mov	hubcnt, #38*4
 		sub	pc, membase	' adjust for VM
 		call	#cogxfr_write
 		add	pc, membase	' adjust for VM
 dumpregs_ret
 		ret
 
+readregs
+		mov	cogaddr, #x0
+		mov	hubaddr, dbgreg_addr
+		mov	hubcnt, #38*4
+		call	#cogxfr_read
+		add	pc, membase	' adjust for VM
+		mov	x0, #0		'
+readregs_ret
+		ret
 newcmd		long 0
 sendcmd
 		call	#waitcmdclear
@@ -676,6 +688,8 @@ pc		long	0
 opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info
+stepcount	long	1	' start in single step mode
+rununtil	long	0
 
 rd		long	0
 rs1		long	0
@@ -683,4 +697,4 @@ rs2		long	0
 funct3		long	0
 divflags	long	0
 
-		fit	$1c8	'$1F0 is whole thing
+		fit	$1e0	'$1F0 is whole thing

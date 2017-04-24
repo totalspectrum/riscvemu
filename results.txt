@@ -1,0 +1,29 @@
+P1 results:
+
+fibo(8):  167072 cycles size of fibo=100 bytes
+xxtea:    497824 cycles size of btea=532 bytes
+fftbench: 637600 us     size of fft_bench=784 bytes
+
+P2 results:
+
+fibo(8):  102872 cycles
+xxtea:    304944 cycles 
+fftbench: 345866 us
+
+after ret optimizations
+
+fibo(8):   98524 cycles
+xxtea:    289352 cycles 
+fftbench: 328642 us
+
+after rdfast
+
+fibo(8):   91752 cycles
+xxtea:    266992 cycles 
+fftbench: 307104 us
+
+move jmp table to LUT
+
+fibo(8):   86336 cycles
+xxtea:    249096 cycles 
+fftbench: 289021 us

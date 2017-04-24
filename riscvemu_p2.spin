@@ -45,43 +45,69 @@ PUB stop
 DAT
 		org 0
 enter
-		jmp	#init
-opcodetab
+init
+		mov	temp, ptra
+		rdlong	cmd_addr, temp
+		add	temp, #4
+		rdlong	membase, temp
+		add	temp, #4
+		rdlong	memsize, temp
+		add	temp, #4
+		rdlong	shadowpc, temp
+		add	temp, #4
+		add	shadowpc, membase
+		mov	x0+2,membase	' set up stack pointer
+		add	x0+2,memsize
+		rdlong	dbgreg_addr, temp
+
+		'' set up opcode table in LUT at offset 0
+		'' initialize to all 0
+		mov    dest, #0
+		mov    temp, #$80
+.oinitlp
+		wrlut	jmpillegalinstr, dest
+		add	dest, #1
+		djnz	temp, #.oinitlp
+
+		'' now set up some specific opcodes
+		wrlut	jmploadop, #3
+		wrlut	jmpimmop,  #3+($04<<2)
+		wrlut	jmpauipc,  #3+($05<<2)
+		wrlut	jmpstoreop,#3+(8<<2)
+		wrlut	jmpregop,  #3+($0C<<2)
+		wrlut	jmplui,    #3+($0D<<2)
+		wrlut	jmpcondbranch, #3+($18<<2)
+		wrlut	jmpjalr,   #3+($19<<2)
+		wrlut	jmpjal,    #3+($1b<<2)
+		wrlut	jmpsys,    #3+($1c<<2)
+		
+		'' finally set up the shadow pc
+		rdfast	x0, shadowpc	        ' should be rdfast #0, pc, but fastspin is buggy
+		jmp	#nexti
+
+jmpillegalinstr
+		jmp	#\illegalinstr
+		
+jmploadop
 {00}		jmp	#\loadop	' load
-{01}		jmp	#\illegalinstr	' float load
-{02}		jmp	#\illegalinstr	' custom0
-{03}		jmp	#\illegalinstr	' fence
+jmpimmop
 {04}		jmp	#\immediateop	' math immediate
+jmpauipc
 {05}		jmp	#\auipc		' auipc
-{06}		jmp	#\illegalinstr	' wide math imm
-{07}		jmp	#\illegalinstr	' ???
-
+jmpstoreop
 {08}		jmp	#\storeop	' store
-{09}		jmp	#\illegalinstr	' float store
-{0A}		jmp	#\illegalinstr	' custom1
-{0B}		jmp	#\illegalinstr	' atomics
+jmpregop
 {0C}		jmp	#\regop		' math reg
+jmplui
 {0D}		jmp	#\lui		' lui
-{0E}		jmp	#\illegalinstr	' wide math reg
-{0F}		jmp	#\illegalinstr	' ???
-
-{10}		jmp	#\illegalinstr
-{11}		jmp	#\illegalinstr
-{12}		jmp	#\illegalinstr
-{13}		jmp	#\illegalinstr
-{14}		jmp	#\illegalinstr
-{15}		jmp	#\illegalinstr
-{16}		jmp	#\illegalinstr	' custom2
-{17}		jmp	#\illegalinstr
-
+jmpcondbranch
 {18}		jmp	#\condbranch	' conditional branch
+jmpjalr
 {19}		jmp	#\jalr
-{1A}		jmp	#\illegalinstr
+jmpjal
 {1B}		jmp	#\jal
+jmpsys
 {1C}		jmp	#\sysinstr	' system
-{1D}		jmp	#\illegalinstr
-{1E}		jmp	#\illegalinstr	' custom3
-{1F}		jmp	#\illegalinstr
 
 ''
 '' table for "regular" math operations
@@ -108,22 +134,6 @@ multab
 {6}		jmp	#\imp_rem
 {7}		jmp	#\imp_remu
 
-init
-		mov	temp, ptra
-		rdlong	cmd_addr, temp
-		add	temp, #4
-		rdlong	membase, temp
-		add	temp, #4
-		rdlong	memsize, temp
-		add	temp, #4
-		rdlong	pc, temp
-		add	temp, #4
-		add	pc, membase
-		mov	x0+2,membase	' set up stack pointer
-		add	x0+2,memsize
-		rdlong	dbgreg_addr, temp
-		jmp	#nexti
-		
 		''
 		'' main instruction decode loop
 		''
@@ -132,14 +142,8 @@ init
 write_and_nexti
 		mov	0-0, dest
 nexti
-		rdlong	opcode, pc
+		rflong	opcode
 '''		call	#checkdebug
-		add	pc, #4
-		'' check for valid opcodes
-		'' the two lower bits must be 11
-		'' that means nonzero, even parity on those two bits
-		test	opcode, #3 wz,wc
-   if_c_or_z	jmp	#illegalinstr
    		mov	temp, opcode
 		shr	temp, #7
 		and	temp, #$1f wz
@@ -147,10 +151,10 @@ nexti
    if_z		mov	temp, #dest	' writes to x0 get ignored
    		setd	write_and_nexti, temp
 		mov	temp, opcode
-		shr	temp, #2
-		and	temp, #$1f
-		add	temp, #opcodetab
-		jmp	temp		'' jump to instruction
+		and	temp, #$7f
+		rdlut	info1, temp
+		and	info1, #$1FF
+		jmp	info1		'' jump to instruction
 		
 		'' come here for illegal instructions
 illegalinstr
@@ -272,7 +276,8 @@ luimask		long	$fffff000
 auipc
 		mov	dest, opcode
 		and	dest, luimask
-		add	dest, pc
+		getptr	shadowpc
+		add	dest, shadowpc
 		sub	dest, membase
 		sub	dest, #4
 		jmp	#write_and_nexti
@@ -291,22 +296,26 @@ jal
 		test	temp, #1 wc	' check old bit 20
 		andn	temp, #1 	' clear low bit
 		muxc	temp, bit11	' set bit 11
-		sub	pc, membase	' and for offset
-		mov	dest, pc		' save old pc
-		sub	pc, #4		' compensate for pc bump
-		add	pc, membase
-		add	pc, temp
+		getptr	shadowpc
+		sub	shadowpc, membase	' and for offset
+		mov	dest, shadowpc		' save old pc
+		sub	shadowpc, #4		' compensate for pc bump
+		add	shadowpc, membase
+		add	shadowpc, temp
+		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
 		jmp	#write_and_nexti
 
 jalr
 		call	#getrs1
 		sar	opcode, #20	' get offset
-		sub	pc, membase
-		mov	dest, pc	' save old pc
+		getptr	shadowpc
+		sub	shadowpc, membase
+		mov	dest, shadowpc	' save old pc
 		alts	rs1, #x0
-		mov	pc, 0-0		' fetch rs1 value
-		add	pc, membase
-		add	pc, opcode
+		mov	shadowpc, 0-0	' fetch rs1 value
+		add	shadowpc, membase
+		add	shadowpc, opcode
+		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
 		jmp	#write_and_nexti
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement load and store
@@ -474,11 +483,12 @@ condbranch
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11
 		andn	opcode, #1	' clear low bit
-		add	opcode, pc
+		getptr	shadowpc
+		add	opcode, shadowpc
 		sub	opcode, #4	' opcode now has desired destination
 		shr	funct3, #1 wc
-	if_c	mov	temp, pc	' if low bit was set, invert sense
-	if_c	mov	pc, opcode
+	if_c	mov	temp, shadowpc	' if low bit was set, invert sense
+	if_c	mov	shadowpc, opcode
 	if_c	mov	opcode, temp
 
 		'' at this point, check for type of compares
@@ -491,15 +501,18 @@ testltu
 		mov	info1, rs1
 		mov	info2, rs2
 		cmp	rs1, rs2 wc,wz
-	if_b	mov	pc, opcode
+	if_b	mov	shadowpc, opcode
+		rdfast	x0, shadowpc
 		jmp	#nexti
 testlt
 		cmps	rs1, rs2 wc,wz
-	if_b	mov	pc, opcode
+	if_b	mov	shadowpc, opcode
+		rdfast	x0, shadowpc
 		jmp	#nexti
 testeq
 		cmp	rs1, rs2 wc,wz
-	if_z	mov	pc, opcode
+	if_z	mov	shadowpc, opcode
+		rdfast	x0, shadowpc
 		jmp	#nexti
 
 
@@ -577,9 +590,10 @@ dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #38*4
-		sub	pc, membase	' adjust for VM
+		getptr	shadowpc
+		sub	shadowpc, membase	' adjust for VM
 		call	#cogxfr_write
-		add	pc, membase	' adjust for VM
+		add	shadowpc, membase	' adjust for VM
 dumpregs_ret
 		ret
 
@@ -588,7 +602,8 @@ readregs
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #38*4
 		call	#cogxfr_read
-		add	pc, membase	' adjust for VM
+		add	shadowpc, membase	' adjust for VM
+		rdfast	x0, shadowpc
 		mov	x0, #0		'
 readregs_ret
 		ret
@@ -646,7 +661,7 @@ hubcnt		long 0
 		'' pc must follow x0-x31
 		'' next one after is also displayed in debug
 x0		long	0[32]
-pc		long	0
+shadowpc	long	0
 opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info

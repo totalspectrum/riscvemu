@@ -86,28 +86,28 @@ init
 		jmp	#nexti
 
 jmpillegalinstr
-		jmp	#\illegalinstr
+		long	illegalinstr
 		
 jmploadop
-{00}		jmp	#\loadop	' load
+{00}		long	loadop	' load
 jmpimmop
-{04}		jmp	#\immediateop	' math immediate
+{04}		long	immediateop	' math immediate
 jmpauipc
-{05}		jmp	#\auipc		' auipc
+{05}		long	auipc		' auipc
 jmpstoreop
-{08}		jmp	#\storeop	' store
+{08}		long	storeop	' store
 jmpregop
-{0C}		jmp	#\regop		' math reg
+{0C}		long	regop		' math reg
 jmplui
-{0D}		jmp	#\lui		' lui
+{0D}		long	lui		' lui
 jmpcondbranch
-{18}		jmp	#\condbranch	' conditional branch
+{18}		long	condbranch	' conditional branch
 jmpjalr
-{19}		jmp	#\jalr
+{19}		long	jalr
 jmpjal
-{1B}		jmp	#\jal
+{1B}		long	jal
 jmpsys
-{1C}		jmp	#\sysinstr	' system
+{1C}		long	sysinstr	' system
 
 ''
 '' table for "regular" math operations
@@ -153,8 +153,8 @@ nexti
 		mov	temp, opcode
 		and	temp, #$7f
 		rdlut	info1, temp
-		and	info1, #$1FF
-		jmp	info1		'' jump to instruction
+		jmp	info1
+
 		
 		'' come here for illegal instructions
 illegalinstr

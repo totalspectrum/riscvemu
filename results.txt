@@ -22,8 +22,8 @@ fibo(8):   91752 cycles
 xxtea:    266992 cycles 
 fftbench: 307104 us
 
-move jmp table to LUT
+move jmp table to LUT, optimized
 
-fibo(8):   86336 cycles
-xxtea:    249096 cycles 
-fftbench: 289021 us
+fibo(8):   84216 cycles
+xxtea:    243848 cycles 
+fftbench: 284451 us

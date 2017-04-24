@@ -168,24 +168,20 @@ illegalinstr
 getrs1
 		mov	rs1, opcode
 		shr	rs1, #15
-		and	rs1, #$1f
-getrs1_ret	ret
+    _ret_	and	rs1, #$1f
 
 
 getrs2
 		mov	rs2, opcode
 		sar	rs2, #20
-		and	rs2, #$1f
-getrs2_ret	ret
+    _ret_	and	rs2, #$1f
 
 
 		'' extract funct3 field
 getfunct3
 		mov	funct3, opcode
 		shr	funct3, #12
-		and	funct3, #7
-getfunct3_ret
-		ret
+    _ret_	and	funct3, #7
 
 mulbit		long	(1<<25)
 
@@ -377,8 +373,7 @@ get_s_imm
 		and	temp, #$1f
 		sar	opcode, #20
 		andn	opcode, #$1f
-		or	opcode, temp	' opcode has offset
-get_s_imm_ret	ret
+    _ret_	or	opcode, temp	' opcode has offset
 
 storetab
 		jmp	#do_wrbyte
@@ -549,8 +544,7 @@ dorem
 umul
 		qmul	dest, rs2
 		getqx	dest
-		getqy	desth
-umul_ret	ret
+    _ret_	getqy	desth
 
 		'' calculate dest / rs2; result in dest, remainder in desth
 udiv
@@ -558,13 +552,12 @@ udiv
 		setq	#0		' set high 64 bits
 		qdiv	dest, rs2	' dest/rs2
 		getqx	dest  		' quotient
-		getqy	desth		' remainder
-udiv_ret	ret
+    _ret_	getqy	desth		' remainder
 
 div_by_zero
 		neg	dest, #1
 		mov	desth, rs1
-		jmp	#udiv_ret
+		ret
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines

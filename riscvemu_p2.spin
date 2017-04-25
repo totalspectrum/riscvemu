@@ -189,6 +189,21 @@ getfunct3
 
 mulbit		long	(1<<25)
 
+		'' math immediate operations
+immediateop
+		sets	mathtab, #imp_add
+		mov	rs2, opcode
+		sar	rs2, #20
+		call	#getrs1
+		call	#getfunct3
+		alts	rs1, #x0
+		mov	dest, 0-0		' load rs1 into dest
+		add	funct3, #mathtab		' funct3 pts at instruction
+
+		'' actually execute the decoded instruction here
+		jmp	funct3
+
+		
 		'' math register operations
 regop
 		call	#getrs2
@@ -198,14 +213,8 @@ regop
 		test	opcode, mulbit wz
 		mov	desth, #mathtab
 	if_nz	mov	desth, #multab
-		jmp	#domath
-		
-		'' math immediate operations
-immediateop
-		sets	mathtab, #imp_add
-		mov	rs2, opcode
-		sar	rs2, #20
-		mov	desth, #mathtab
+
+		'' fall through
 		
 		'' generic math routine
 		'' enter with rs2 having the decoded value of rs2

@@ -33,3 +33,8 @@ optimize branches & reads
 fibo(8):   83808 cycles
 xxtea:    243188 cycles 
 fftbench: 283452 us
+
+re-arrange math code
+fibo(8):   82992 cycles
+xxtea:    236994 cycles 
+fftbench: 276891 us

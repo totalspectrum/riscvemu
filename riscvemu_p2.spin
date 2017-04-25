@@ -328,31 +328,44 @@ loadtab
 		jmp	#\do_rdword
 		jmp	#\do_rdlong
 		jmp	#illegalinstr
-		
+		jmp	#\do_rdbytes
+		jmp	#\do_rdwords
+		jmp	#\do_rdlong
+		jmp	#illegalinstr
 loadop
 		call	#getrs1
 		call	#getfunct3
 		alts	rs1, #x0
     		mov	dest, 0-0	' set dest to value of rs1
-		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
-		and	funct3, #3
+		and	funct3, #7
 		add	funct3, #loadtab
 		sar	opcode, #20	' extract immediate
 		add	dest, opcode	' add offset
 		jmp	funct3
 
-		'' sign bit was set above
+bytesignextend	long	$FFFFFF00
+wordsignextend	long	$FFFF0000
+
 do_rdbyte
 		add	dest, membase
 		rdbyte	dest, dest
-	if_z	shl	dest, #24	' if z bit set, sign extend
-	if_z	sar	dest, #24
+		jmp	#write_and_nexti
+		
+do_rdbytes
+		add	dest, membase
+		rdbyte	dest, dest wc
+		muxc	dest, bytesignextend
 		jmp	#write_and_nexti
 do_rdword
 		add	dest, membase
 		rdword	dest, dest
 	if_z	shl	dest, #16	' if z bit set, sign extend
 	if_z	sar	dest, #16
+		jmp	#write_and_nexti
+do_rdwords
+		add	dest, membase
+		rdword	dest, dest wc
+		muxc	dest, wordsignextend
 		jmp	#write_and_nexti
 do_rdlong
 		mov	info1, #$aa

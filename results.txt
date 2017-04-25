@@ -27,3 +27,9 @@ move jmp table to LUT, optimized
 fibo(8):   84216 cycles
 xxtea:    243848 cycles 
 fftbench: 284451 us
+
+optimize branches & reads
+
+fibo(8):   83808 cycles
+xxtea:    243188 cycles 
+fftbench: 283452 us

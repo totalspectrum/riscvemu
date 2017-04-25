@@ -2,7 +2,7 @@
 #include <time.h>
 #include "xxtea.h"
 
-#define printf iprintf
+extern void iprintf(const char *, ...);
 
 extern unsigned int getcnt();
 
@@ -18,11 +18,11 @@ int main(int argc, char* argv[])
     clock_t start, end;
 
     start = getcnt();
-	btea (testVector, -blockSize, (uint32_t*) key);
+    btea (testVector, -blockSize, (uint32_t*) key);
     end = getcnt();
 
-	printf("%s\n", (char*)testVector);
-    printf("done in %lu cycles\n", (unsigned long)(end - start));
+    iprintf("%s\n", (char*)testVector);
+    iprintf("done in %lu cycles\n", (unsigned long)(end - start));
 
-	return(0);
+    return(0);
 } 

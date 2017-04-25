@@ -368,8 +368,6 @@ do_rdbytes
 do_rdword
 		add	dest, membase
 		rdword	dest, dest
-	if_z	shl	dest, #16	' if z bit set, sign extend
-	if_z	sar	dest, #16
 		jmp	#write_and_nexti
 do_rdwords
 		add	dest, membase

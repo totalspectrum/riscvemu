@@ -296,11 +296,10 @@ jal
 		test	temp, #1 wc	' check old bit 20
 		andn	temp, #1 	' clear low bit
 		muxc	temp, bit11	' set bit 11
-		getptr	shadowpc
-		sub	shadowpc, membase	' and for offset
-		mov	dest, shadowpc		' save old pc
+		getptr	dest  		' get old PC
+		mov	shadowpc, dest
+		sub	dest, membase	' adjust for offset
 		sub	shadowpc, #4		' compensate for pc bump
-		add	shadowpc, membase
 		add	shadowpc, temp
 		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
 		jmp	#write_and_nexti
@@ -308,9 +307,8 @@ jal
 jalr
 		call	#getrs1
 		sar	opcode, #20	' get offset
-		getptr	shadowpc
-		sub	shadowpc, membase
-		mov	dest, shadowpc	' save old pc
+		getptr	dest		' save old PC
+		sub	dest, membase
 		alts	rs1, #x0
 		mov	shadowpc, 0-0	' fetch rs1 value
 		add	shadowpc, membase

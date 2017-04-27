@@ -238,9 +238,8 @@ imp_add
 		add	dest, rs2
 		jmp	#write_and_nexti
 imp_addsub
-		test	opcode, sra_mask wz
-	if_z	add	dest, rs2
-	if_nz	sub	dest, rs2
+		test	opcode, sra_mask wc
+		sumc	dest, rs2	 ' if C=1 dest = dest - rs2, otherwise dest = dest + rs2
 		jmp	#write_and_nexti
 
 imp_sll		shl	dest, rs2
@@ -248,10 +247,12 @@ imp_sll		shl	dest, rs2
 		
 imp_slt		cmps	dest, rs2 wz,wc
 		mov	dest, #0
-  if_b		mov	dest, #1
+		muxc	dest, #1
   		jmp	#write_and_nexti
 imp_sltu	cmp	dest, rs2 wz,wc
-		jmp	#imp_slt+1
+		mov	dest, #0
+		muxc	dest, #1
+		jmp	#write_and_nexti
 imp_xor
 		xor	dest, rs2
 		jmp	#write_and_nexti
@@ -516,8 +517,6 @@ condbranch
 	if_z	jmp	#testeq
 	if_nc	jmp	#testlt
 testltu
-		mov	info1, rs1
-		mov	info2, rs2
 		cmp	rs1, rs2 wc,wz
 	if_b	mov	shadowpc, opcode
 		rdfast	x0, shadowpc

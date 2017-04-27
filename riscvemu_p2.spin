@@ -490,48 +490,63 @@ csrrc
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+condbranch_tab
+		jmp	#\do_beq
+		jmp	#\do_bne
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+		jmp	#\do_blt
+		jmp	#\do_bge
+		jmp	#\do_bltu
+		jmp	#\do_bgeu
 condbranch
 		call	#getrs1
 		call	#getrs2
+		call	#getfunct3
 		alts	rs1, #x0
 		mov	rs1, 0-0
 		alts	rs2, #x0
         	mov	rs2, 0-0
-		call	#getfunct3
 		call	#get_s_imm	' opcode now contains s-type immediate
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11
 		andn	opcode, #1	' clear low bit
+		add	funct3, #condbranch_tab
+		jmp	funct3
+
+do_beq
+		cmp	rs1, rs2 wz
+	if_nz	jmp	#nexti
+		'' fall through
+takebranch
 		getptr	shadowpc
 		add	opcode, shadowpc
 		sub	opcode, #4	' opcode now has desired destination
-		shr	funct3, #1 wc
-	if_c	mov	temp, shadowpc	' if low bit was set, invert sense
-	if_c	mov	shadowpc, opcode
-	if_c	mov	opcode, temp
-
-		'' at this point, check for type of compares
-		'' C will be set for an unsigned compare, clear for signed
-		'' Z will be set for test ==, clear for test <
-		shr	funct3, #1 wc,wz	' check for signed compare
-	if_z	jmp	#testeq
-	if_nc	jmp	#testlt
-testltu
-		cmp	rs1, rs2 wc,wz
-	if_b	mov	shadowpc, opcode
-		rdfast	x0, shadowpc
+		rdfast	x0, opcode	' reset pc
 		jmp	#nexti
-testlt
+
+do_bne
+		cmp	rs1, rs2 wz
+	if_z	jmp	#nexti
+		jmp	#takebranch
+		
+do_bltu
+		cmp	rs1, rs2 wc,wz
+	if_nc	jmp	#nexti
+		jmp	#takebranch
+do_blt
 		cmps	rs1, rs2 wc,wz
-	if_b	mov	shadowpc, opcode
-		rdfast	x0, shadowpc
-		jmp	#nexti
-testeq
+	if_nc	jmp	#nexti
+		jmp	#takebranch
+		
+do_bgeu
 		cmp	rs1, rs2 wc,wz
-	if_z	mov	shadowpc, opcode
-		rdfast	x0, shadowpc
-		jmp	#nexti
-
+	if_c	jmp	#nexti
+		jmp	#takebranch
+do_bge
+		cmps	rs1, rs2 wc,wz
+	if_c	jmp	#nexti
+		jmp	#takebranch
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' unsigned multiply rs1 * rs2 -> (dest, desth)

@@ -40,3 +40,8 @@ re-arrange math code
 fibo(8):   82992 cycles
 xxtea:    236994 cycles 
 fftbench: 276892 us
+
+with branch optimizations
+fibo(8):   82992 cycles
+xxtea:    235952 cycles 
+fftbench: 276892 us

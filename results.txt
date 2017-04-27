@@ -42,6 +42,7 @@ xxtea:    236994 cycles
 fftbench: 276892 us
 
 with branch optimizations
-fibo(8):   82992 cycles
+fibo(8):   81664 cycles
 xxtea:    235952 cycles 
-fftbench: 276892 us
+fftbench: 270948 us
+toggle:      134 kHz

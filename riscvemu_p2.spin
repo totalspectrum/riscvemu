@@ -110,12 +110,25 @@ jmpsys
 {1C}		long	sysinstr	' system
 
 ''
+'' table for immediate operations
+''
+mathimmtab
+{0}		jmp	#\imp_add	'' add or sub, based on imm field
+{1}		jmp	#\imp_sll	'' shl
+{2}		jmp	#\imp_slt	'' set if less than, signed
+{3}		jmp	#\imp_sltu	'' set if less than, unsigned
+{4}		jmp	#\imp_xor	'' xori
+{5}		jmp	#\imp_shr	'' srli or srai, based on imm 
+{6}		jmp	#\imp_or		'' ori
+{7}		jmp	#\imp_and	'' andi
+
+''
 '' table for "regular" math operations
 '' note that if bits 31..25 of the opcode == 1, we should use
 '' the "mul" table instead
-'' also note that
-mathtab
-{0}		jmp	#\imp_add	'' add or sub, based on imm field
+'' 
+mathregtab
+{0}		jmp	#\imp_addsub	'' add or sub, based on imm field
 {1}		jmp	#\imp_sll	'' shl
 {2}		jmp	#\imp_slt	'' set if less than, signed
 {3}		jmp	#\imp_sltu	'' set if less than, unsigned
@@ -191,14 +204,13 @@ mulbit		long	(1<<25)
 
 		'' math immediate operations
 immediateop
-		sets	mathtab, #imp_add
 		mov	rs2, opcode
 		sar	rs2, #20
 		call	#getrs1
 		call	#getfunct3
 		alts	rs1, #x0
 		mov	dest, 0-0		' load rs1 into dest
-		add	funct3, #mathtab		' funct3 pts at instruction
+		add	funct3, #mathimmtab		' funct3 pts at instruction
 
 		'' actually execute the decoded instruction here
 		jmp	funct3
@@ -207,11 +219,10 @@ immediateop
 		'' math register operations
 regop
 		call	#getrs2
-		sets	mathtab, #imp_addsub
 		alts	rs2, #x0
 		mov	rs2, 0-0
 		test	opcode, mulbit wz
-		mov	desth, #mathtab
+		mov	desth, #mathregtab
 	if_nz	mov	desth, #multab
 
 		'' fall through

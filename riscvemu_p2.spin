@@ -113,14 +113,14 @@ jmpsys
 '' table for immediate operations
 ''
 mathimmtab
-{0}		jmp	#\imp_add	'' add or sub, based on imm field
-{1}		jmp	#\imp_sll	'' shl
-{2}		jmp	#\imp_slt	'' set if less than, signed
-{3}		jmp	#\imp_sltu	'' set if less than, unsigned
-{4}		jmp	#\imp_xor	'' xori
-{5}		jmp	#\imp_shr	'' srli or srai, based on imm 
-{6}		jmp	#\imp_or		'' ori
-{7}		jmp	#\imp_and	'' andi
+{0}		long	imp_add	'' add or sub, based on imm field
+{1}		long	imp_sll	'' shl
+{2}		long	imp_slt	'' set if less than, signed
+{3}		long	imp_sltu	'' set if less than, unsigned
+{4}		long	imp_xor	'' xori
+{5}		long	imp_shr	'' srli or srai, based on imm 
+{6}		long	imp_or		'' ori
+{7}		long	imp_and	'' andi
 
 ''
 '' table for "regular" math operations
@@ -128,24 +128,24 @@ mathimmtab
 '' the "mul" table instead
 '' 
 mathregtab
-{0}		jmp	#\imp_addsub	'' add or sub, based on imm field
-{1}		jmp	#\imp_sll	'' shl
-{2}		jmp	#\imp_slt	'' set if less than, signed
-{3}		jmp	#\imp_sltu	'' set if less than, unsigned
-{4}		jmp	#\imp_xor	'' xori
-{5}		jmp	#\imp_shr	'' srli or srai, based on imm 
-{6}		jmp	#\imp_or		'' ori
-{7}		jmp	#\imp_and	'' andi
+{0}		long	imp_addsub	'' add or sub, based on imm field
+{1}		long	imp_sll	'' shl
+{2}		long	imp_slt	'' set if less than, signed
+{3}		long	imp_sltu	'' set if less than, unsigned
+{4}		long	imp_xor	'' xori
+{5}		long	imp_shr	'' srli or srai, based on imm 
+{6}		long	imp_or		'' ori
+{7}		long	imp_and	'' andi
 
 multab
-{0}		jmp	#\imp_mul
-{1}		jmp	#\illegalinstr	'' mulh, not implemented
-{2}		jmp	#\illegalinstr	'' mulhsu, not implemented
-{3}		jmp	#\imp_muluh
-{4}		jmp	#\imp_div
-{5}		jmp	#\imp_divu
-{6}		jmp	#\imp_rem
-{7}		jmp	#\imp_remu
+{0}		long	imp_mul
+{1}		long	illegalinstr	'' mulh, not implemented
+{2}		long	illegalinstr	'' mulhsu, not implemented
+{3}		long	imp_muluh
+{4}		long	imp_div
+{5}		long	imp_divu
+{6}		long	imp_rem
+{7}		long	imp_remu
 
 		''
 		'' main instruction decode loop
@@ -210,8 +210,9 @@ immediateop
 		call	#getfunct3
 		alts	rs1, #x0
 		mov	dest, 0-0		' load rs1 into dest
-		add	funct3, #mathimmtab		' funct3 pts at instruction
-
+		alts	funct3, #mathimmtab	' funct3 pts at instruction
+		mov	funct3, 0-0
+		
 		'' actually execute the decoded instruction here
 		jmp	funct3
 
@@ -237,8 +238,8 @@ domath
 		call	#getfunct3
 		alts	rs1, #x0
 		mov	dest, 0-0		' load rs1 into dest
-		add	funct3, desth		' funct3 pts at instruction
-
+		alts	funct3, desth		' funct3 pts at instruction
+		mov	funct3, 0-0
 		'' actually execute the decoded instruction here
 		jmp	funct3
 
@@ -345,23 +346,23 @@ jalr
 ' the load; the S field is 0 for unsigned load, 1 for signed
 
 loadtab
-		jmp	#\do_rdbyte
-		jmp	#\do_rdword
-		jmp	#\do_rdlong
-		jmp	#illegalinstr
-		jmp	#\do_rdbytes
-		jmp	#\do_rdwords
-		jmp	#\do_rdlong
-		jmp	#illegalinstr
+		long	do_rdbyte
+		long	do_rdword
+		long	do_rdlong
+		long	illegalinstr
+		long	do_rdbytes
+		long	do_rdwords
+		long	do_rdlong
+		long	illegalinstr
 loadop
 		call	#getrs1
 		call	#getfunct3
 		alts	rs1, #x0
     		mov	dest, 0-0	' set dest to value of rs1
-		and	funct3, #7
-		add	funct3, #loadtab
 		sar	opcode, #20	' extract immediate
 		add	dest, opcode	' add offset
+		alts	funct3, #loadtab
+		mov	funct3, 0-0
 		jmp	funct3
 
 bytesignextend	long	$FFFFFF00
@@ -415,10 +416,10 @@ get_s_imm
     _ret_	or	opcode, temp	' opcode has offset
 
 storetab
-		jmp	#do_wrbyte
-		jmp	#do_wrword
-		jmp	#do_wrlong
-		jmp	#illegalinstr
+		long	do_wrbyte
+		long	do_wrword
+		long	do_wrlong
+		long	illegalinstr
 		
 storeop
 		call	#getrs2
@@ -431,11 +432,12 @@ storeop
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
 	if_nz	jmp	#illegalinstr
 		and	funct3, #3
-		add	funct3, #storetab
 
 		'' extract s-type immediate
 		call	#get_s_imm
 		add	rs1, opcode	' find address
+		alts	funct3, #storetab
+		mov	funct3, 0-0
 		jmp	funct3		' go do store
 
 iobase		long	$f0000000
@@ -472,19 +474,20 @@ do_wrbyte
 ' implement csrrw instruction
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 sysinstrtab
-		jmp	#\illegalinstr
-		jmp	#\csrrw
-		jmp	#\csrrs
-		jmp	#\csrrc
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
+		long	illegalinstr
+		long	csrrw
+		long	csrrs
+		long	csrrc
+		long	illegalinstr
+		long	illegalinstr
+		long	illegalinstr
+		long	illegalinstr
 sysinstr
 		call	#getrs1
 		call	#getfunct3
 		shr	opcode, #20	' extract CSR address
-		add	funct3, #sysinstrtab
+		alts	funct3, #sysinstrtab
+		mov	funct3, 0-0
 		jmp	funct3
 
 csrrw
@@ -502,14 +505,14 @@ csrrc
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 condbranch_tab
-		jmp	#\do_beq
-		jmp	#\do_bne
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\do_blt
-		jmp	#\do_bge
-		jmp	#\do_bltu
-		jmp	#\do_bgeu
+		long	do_beq
+		long	do_bne
+		long	illegalinstr
+		long	illegalinstr
+		long	do_blt
+		long	do_bge
+		long	do_bltu
+		long	do_bgeu
 condbranch
 		call	#getrs1
 		call	#getrs2
@@ -522,7 +525,8 @@ condbranch
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11
 		andn	opcode, #1	' clear low bit
-		add	funct3, #condbranch_tab
+		alts	funct3, #condbranch_tab
+		mov	funct3, 0-0
 		jmp	funct3
 
 do_beq

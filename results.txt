@@ -50,3 +50,8 @@ with jump table optimization
 fibo(8):   79212 cycles
 xxtea:    225948 cycles 
 fftbench: 262382 us
+
+using skip on immediates
+fibo(8):   78669 cycles
+xxtea:    224864 cycles 
+fftbench: 260738 us

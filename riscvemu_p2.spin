@@ -30,6 +30,8 @@
      F000_0004 - F000_07FC = COG memory space (useful for accessing COG registers like CNT and OUTA)
    
 }}
+'#define CHECK_WRITES
+
 
 VAR
   long cog			' 1 + the cog id of the cog running the emulator
@@ -56,8 +58,7 @@ init
 		rdlong	shadowpc, temp
 		add	temp, #4
 		add	shadowpc, membase
-		mov	x0+2,membase	' set up stack pointer
-		add	x0+2,memsize
+		mov	x0+2,memsize	' set up stack pointer
 		rdlong	dbgreg_addr, temp
 
 		'' set up opcode table in LUT at offset 0
@@ -108,19 +109,6 @@ jmpjal
 {1B}		long	jal
 jmpsys
 {1C}		long	sysinstr	' system
-
-''
-'' table for immediate operations
-''
-mathimmtab
-{0}		long	imp_add	'' add or sub, based on imm field
-{1}		long	imp_sll	'' shl
-{2}		long	imp_slt	'' set if less than, signed
-{3}		long	imp_sltu	'' set if less than, unsigned
-{4}		long	imp_xor	'' xori
-{5}		long	imp_shr	'' srli or srai, based on imm 
-{6}		long	imp_or		'' ori
-{7}		long	imp_and	'' andi
 
 ''
 '' table for "regular" math operations
@@ -202,21 +190,55 @@ getfunct3
 
 mulbit		long	(1<<25)
 
-		'' math immediate operations
+mathskiptab
+{0}		long	%11_111_1_1111_1_0_00	'' add 
+{1}		long	%11_111_1_1111_0_1_00 	'' imp_sll	'' shl
+{2}		long	%11_111_1_0010_1_1_00 	'' imp_slt	'' set if less than, signed
+{3}		long	%11_111_1_0001_1_1_00	'' imp_sltu	'' set if less than, unsigned
+{4}		long	%11_111_0_1111_1_1_00	'' imp_xor	'' xori
+{5}		long	%11_000_1_1111_1_1_00	'' imp_shr	'' srli or srai, based on imm 
+{6}		long	%10_111_1_1111_1_1_00	'' imp_or
+{7}		long	%01_111_1_1111_1_1_00	'' imp_and
+
+'' math immediate operations
+'' implemented by skipping over some other instructions
+
 immediateop
 		mov	rs2, opcode
 		sar	rs2, #20
 		call	#getrs1
 		call	#getfunct3
-		alts	rs1, #x0
-		mov	dest, 0-0		' load rs1 into dest
-		alts	funct3, #mathimmtab	' funct3 pts at instruction
+		alts	funct3, #mathskiptab	' funct3 pts at instruction
 		mov	funct3, 0-0
 		
-		'' actually execute the decoded instruction here
-		jmp	funct3
-
+		'' actually execute the decoded instructions below
+		skipf	funct3
 		
+		alts	rs1, #x0
+		mov	dest, 0-0		' load rs1 into dest
+		
+		add	dest, rs2
+		
+		shl	dest, rs2
+
+		cmps	dest, rs2 wc		' slt
+		cmp	dest, rs2 wc		' sltu
+		mov	dest, #0
+		muxc	dest, #1
+
+		xor	dest, rs2
+
+		'' depending on opcode we do sar or shr
+		test	opcode, sra_mask wc
+	if_nc	shr	dest, rs2
+	if_c	sar	dest, rs2
+
+		or	dest, rs2
+
+		and	dest, rs2
+
+		jmp	#write_and_nexti
+
 		'' math register operations
 regop
 		call	#getrs2
@@ -270,9 +292,9 @@ imp_xor
 		jmp	#write_and_nexti
 imp_shr
 		'' depending on opcode we do sar or shr
-		test	opcode, sra_mask wz
-	if_z	shr	dest, rs2
-	if_nz	sar	dest, rs2
+		test	opcode, sra_mask wc
+	if_nc	shr	dest, rs2
+	if_c	sar	dest, rs2
 		jmp	#write_and_nexti
 		
 imp_or		or	dest, rs2
@@ -388,7 +410,6 @@ do_rdwords
 		muxc	dest, wordsignextend
 		jmp	#write_and_nexti
 do_rdlong
-		mov	info1, #$aa
 		test	dest, iobase wz
 	if_nz	jmp	#read_io
 		add	dest, membase
@@ -401,7 +422,6 @@ read_io
 		and	dest, #$1ff	' mask off COG memory
 		alts	dest, #0
         	mov	dest, 0-0
-		mov	info2, dest
 		jmp	#write_and_nexti
 		
 		''
@@ -444,6 +464,10 @@ iobase		long	$f0000000
 do_wrlong
 		test	rs1, iobase wz
     if_nz	jmp	#write_io
+#ifdef CHECK_WRITES
+		cmp	rs1, memsize
+	if_nc	jmp	#illegalinstr
+#endif
 		add	rs1, membase
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
@@ -457,15 +481,23 @@ write_io
 		call	#waitcmdclear
 		jmp	#nexti
 doiocog
-		altd	rs1, #0
-		mov	0-0, dest
+''		altd	rs1, #0
+''		mov	0-0, dest
 		jmp	#nexti
 
 do_wrword
+#ifdef CHECK_WRITES
+		cmp	rs1, memsize
+	if_nc	jmp	#illegalinstr
+#endif
 		add	rs1, membase
 		wrword	dest, rs1
 		jmp	#nexti		' no writeback
 do_wrbyte
+#ifdef CHECK_WRITES
+		cmp	rs1, memsize
+	if_nc	jmp	#illegalinstr
+#endif
 		add	rs1, membase
 		wrbyte	dest, rs1
 		jmp	#nexti		' no writeback
@@ -721,4 +753,4 @@ rs2		long	0
 funct3		long	0
 divflags	long	0
 
-		fit	$1e0	'$1F0 is whole thing
+		fit	$1f0	'$1F0 is whole thing

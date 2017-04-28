@@ -188,6 +188,18 @@ getfunct3
 		shr	funct3, #12
     _ret_	and	funct3, #7
 
+    		'' extract all of funct3, rs2, rs1
+decodeall
+		mov	rs1, opcode
+		shr	rs1, #15
+    		and	rs1, #$1f
+		mov	rs2, opcode
+		sar	rs2, #20
+    		and	rs2, #$1f
+		mov	funct3, opcode
+		shr	funct3, #12
+    _ret_	and	funct3, #7
+
 mulbit		long	(1<<25)
 
 mathskiptab
@@ -241,7 +253,7 @@ immediateop
 
 		'' math register operations
 regop
-		call	#getrs2
+		call	#decodeall
 		alts	rs2, #x0
 		mov	rs2, 0-0
 		test	opcode, mulbit wz
@@ -256,8 +268,6 @@ regop
 		'' and with desth containing the table to use
 		'' (generic mathtab, or multab)
 domath
-		call	#getrs1
-		call	#getfunct3
 		alts	rs1, #x0
 		mov	dest, 0-0		' load rs1 into dest
 		alts	funct3, desth		' funct3 pts at instruction
@@ -546,9 +556,7 @@ condbranch_tab
 		long	do_bltu
 		long	do_bgeu
 condbranch
-		call	#getrs1
-		call	#getrs2
-		call	#getfunct3
+		call	#decodeall
 		alts	rs1, #x0
 		mov	rs1, 0-0
 		alts	rs2, #x0

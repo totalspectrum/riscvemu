@@ -55,3 +55,8 @@ using skip on immediates
 fibo(8):   78669 cycles
 xxtea:    224864 cycles 
 fftbench: 260738 us
+
+faster decode
+fibo(8):   77060 cycles
+xxtea:    210252 cycles 
+fftbench: 243939 us

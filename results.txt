@@ -60,3 +60,8 @@ faster decode
 fibo(8):   77060 cycles
 xxtea:    210252 cycles 
 fftbench: 243939 us
+
+direct memory access
+fibo(8):   76192 cycles
+xxtea:    210252 cycles 
+fftbench: 241577 us

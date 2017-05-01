@@ -7,7 +7,8 @@
 CON
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
-   
+  PROGBASE = $2000
+
 OBJ
 #ifdef __P2__
   ser: "SimpleSerial"
@@ -42,24 +43,15 @@ VAR
   long params[5]
   long cmdreg
 
-DAT
-
-dummy
-	long 1	'' force long alignment
-progmem
-	file	"test.bin"
-padding
-	byte	0[memsize - (@padding - @progmem)]
-	
 PUB demo | cmd, arg, c
   ser.start(31, 30, 0, 115200)
   ser.str(string("Processor emulation", 13, 10))
   ser.str(string("starting emulation; base="))
-  ser.hex(@progmem, 8)
+  ser.hex(PROGBASE, 8)
   params[0] := @cmdreg
-  params[1] := @progmem ' base of memory
+  params[1] := PROGBASE ' base of memory
   params[2] := memsize
-  params[3] := 0	' initial PC (relative to base)
+  params[3] := PROGBASE	' initial PC
   params[4] := @regs	' debug address
   proc.start(@params)
   ser.str(string(" ok"))

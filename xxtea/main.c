@@ -2,7 +2,7 @@
 #include <time.h>
 #include "xxtea.h"
 
-extern void iprintf(const char *, ...);
+extern int iprintf(const char *, ...);
 
 extern unsigned int getcnt();
 

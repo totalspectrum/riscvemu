@@ -57,8 +57,8 @@ init
 		add	temp, #4
 		rdlong	shadowpc, temp
 		add	temp, #4
-		add	shadowpc, membase
 		mov	x0+2,memsize	' set up stack pointer
+		add	x0+2,membase
 		rdlong	dbgreg_addr, temp
 
 		'' set up opcode table in LUT at offset 0
@@ -332,7 +332,6 @@ auipc
 		and	dest, luimask
 		getptr	shadowpc
 		add	dest, shadowpc
-		sub	dest, membase
 		sub	dest, #4
 		jmp	#write_and_nexti
 
@@ -352,7 +351,6 @@ jal
 		muxc	temp, bit11	' set bit 11
 		getptr	dest  		' get old PC
 		mov	shadowpc, dest
-		sub	dest, membase	' adjust for offset
 		sub	shadowpc, #4		' compensate for pc bump
 		add	shadowpc, temp
 		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
@@ -362,10 +360,8 @@ jalr
 		call	#getrs1
 		sar	opcode, #20	' get offset
 		getptr	dest		' save old PC
-		sub	dest, membase
 		alts	rs1, #x0
 		mov	shadowpc, 0-0	' fetch rs1 value
-		add	shadowpc, membase
 		add	shadowpc, opcode
 		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
 		jmp	#write_and_nexti
@@ -401,28 +397,23 @@ bytesignextend	long	$FFFFFF00
 wordsignextend	long	$FFFF0000
 
 do_rdbyte
-		add	dest, membase
 		rdbyte	dest, dest
 		jmp	#write_and_nexti
 		
 do_rdbytes
-		add	dest, membase
 		rdbyte	dest, dest wc
 		muxc	dest, bytesignextend
 		jmp	#write_and_nexti
 do_rdword
-		add	dest, membase
 		rdword	dest, dest
 		jmp	#write_and_nexti
 do_rdwords
-		add	dest, membase
 		rdword	dest, dest wc
 		muxc	dest, wordsignextend
 		jmp	#write_and_nexti
 do_rdlong
 		test	dest, iobase wz
 	if_nz	jmp	#read_io
-		add	dest, membase
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
@@ -478,7 +469,6 @@ do_wrlong
 		cmp	rs1, memsize
 	if_nc	jmp	#illegalinstr
 #endif
-		add	rs1, membase
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
 		'' handle special IO stuff
@@ -500,7 +490,6 @@ do_wrword
 		cmp	rs1, memsize
 	if_nc	jmp	#illegalinstr
 #endif
-		add	rs1, membase
 		wrword	dest, rs1
 		jmp	#nexti		' no writeback
 do_wrbyte
@@ -508,7 +497,6 @@ do_wrbyte
 		cmp	rs1, memsize
 	if_nc	jmp	#illegalinstr
 #endif
-		add	rs1, membase
 		wrbyte	dest, rs1
 		jmp	#nexti		' no writeback
 
@@ -678,9 +666,7 @@ dumpregs
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #38*4
 		getptr	shadowpc
-		sub	shadowpc, membase	' adjust for VM
 		call	#cogxfr_write
-		add	shadowpc, membase	' adjust for VM
 dumpregs_ret
 		ret
 
@@ -689,7 +675,6 @@ readregs
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #38*4
 		call	#cogxfr_read
-		add	shadowpc, membase	' adjust for VM
 		rdfast	x0, shadowpc
 		mov	x0, #0		'
 readregs_ret

@@ -10,17 +10,17 @@ CON
   PROGBASE = $2000
 
 OBJ
-#ifdef __P2__
   ser: "SimpleSerial"
-  proc: "riscvemu_p2"
+#ifdef __P2__
+  proc: "riscvemu_p2.spin"
 #else
-  ser: "FullDuplexSerial"
-  proc: "riscvemu"
+  proc: "riscvemu.spin"
 #endif
 
 CON
-  memsize = 16*1024		' size of RAM given to the RISC-V chip
-  
+'  memsize = 16*1024		' size of RAM given to the RISC-V chip
+ memsize = 24*1024
+ 
 VAR
   ' regs are 32 general purpose registers, followed by pc and debug
   ' debug info is:
@@ -28,8 +28,10 @@ VAR
   ' 33 = opcode
   ' 34 = info1
   ' 35 = info2
-  ' 36 = step count
-  ' 37-39 = reserved
+  ' 36 = info3
+  ' 37 = info4
+  ' 38 = reserved
+  ' 39 = step count
   
   long regs[40]
   
@@ -62,17 +64,20 @@ PUB demo | cmd, arg, c
     cmd := cmdreg & $f
     arg := cmdreg >> 4
     if (cmd == 1)	' single step
+      ser.str(string("*** step ***", 13, 10))
       dumpregs
       c := waitforkey
       if (c == "b")
-        regs[36] := 100 '' big step
+        regs[39] := 100 '' big step
       elseif (c == "c")
-        regs[36] := 0   ' continue, no stepping
+        regs[39] := 0   ' continue, no stepping
       else
-        regs[36] := 1
+        regs[39] := 1
     elseif (cmd == 2)	' illegal instruction
       ser.str(string("*** illegal instruction ***", 13, 10))
       dumpregs
+      regs[38] := 0
+      regs[39] := 1
       waitforkey
     elseif (cmd == $f) ' write a byte
       if (arg == $a) ' newline
@@ -102,10 +107,14 @@ PRI dumpregs | i,j
   ser.hex(regs[32], 8)
   ser.str(string(" dbg="))
   ser.hex(regs[33], 8)
-  ser.str(string(" info1="))
+  ser.str(string(" info1: "))
   ser.hex(regs[34], 8)
-  ser.str(string(" info2="))
+  ser.str(string(" "))
   ser.hex(regs[35], 8)
+  ser.str(string(" "))
+  ser.hex(regs[36], 8)
+  ser.str(string(" "))
+  ser.hex(regs[37], 8)
   nl
 
 PRI waitforkey | c

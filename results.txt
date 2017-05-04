@@ -65,3 +65,8 @@ direct memory access
 fibo(8):   76192 cycles
 xxtea:    210252 cycles 
 fftbench: 241577 us
+
+use csrrw for UART
+fibo(8):   74828 cycles
+xxtea:    207820 cycles 
+fftbench: 237912 us

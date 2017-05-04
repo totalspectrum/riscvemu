@@ -13,7 +13,7 @@
    params[1] = base of emulated memory
    params[2] = size of emulated memory (stack will start at base + size and grow down)
    params[3] = initial pc (usually 0)
-   params[4] = address for register dump (36 longs; x0-x31, pc, opcode, dbg1, dbg3)
+   params[4] = address for register dump (40 longs; x0-x31, pc, opcode, 4xinfo, stepcount, rununtil)
 
    The command register is used for communication from the RISC-V back to the host.
    The lowest 4 bits contain a command, as follows:
@@ -23,15 +23,14 @@
 
    The host should write 0 to the command register as an "ACK" to restart the RISC-V.
   ---------------------------------------------------------------------
-  Emulated memory map:
-  0000_0000 - 0000_xxxx: RAM (0 is membase)
-  F000_0000 - FFFF_FFFF: I/O space:
-     F000_0000 = command register; writes here go to the host command register
-     F000_0004 - F000_07FC = COG memory space (useful for accessing COG registers like CNT and OUTA)
-   
+  Reads and writes go directly to the host HUB memory. To access COG memory
+  or special registers use the CSR instructions. CSRs we know about:
+     7Fx - COG registers 1F0-1FF
+     BC0 - UART register
+     C00 - cycle counter   
 }}
 '#define CHECK_WRITES
-
+'#define DEBUG
 
 VAR
   long cog			' 1 + the cog id of the cog running the emulator
@@ -143,8 +142,10 @@ multab
 write_and_nexti
 		mov	0-0, dest
 nexti
+#ifdef DEBUG
+		call	#checkdebug
+#endif
 		rflong	opcode
-'''		call	#checkdebug
    		mov	temp, opcode
 		shr	temp, #7
 		and	temp, #$1f wz
@@ -412,19 +413,9 @@ do_rdwords
 		muxc	dest, wordsignextend
 		jmp	#write_and_nexti
 do_rdlong
-		test	dest, iobase wz
-	if_nz	jmp	#read_io
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
-read_io
-		'' read from COG memory
-		shr	dest, #2	' convert from bytes to longs
-		and	dest, #$1ff	' mask off COG memory
-		alts	dest, #0
-        	mov	dest, 0-0
-		jmp	#write_and_nexti
-		
 		''
 		'' re-order bits of opcode so that it is
 		'' an s-type immediate value
@@ -463,27 +454,12 @@ storeop
 
 iobase		long	$f0000000
 do_wrlong
-		test	rs1, iobase wz
-    if_nz	jmp	#write_io
 #ifdef CHECK_WRITES
 		cmp	rs1, memsize
 	if_nc	jmp	#illegalinstr
 #endif
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
-		'' handle special IO stuff
-write_io
-		andn	rs1, iobase
-		shr	rs1, #2 wz
-    if_nz	jmp	#doiocog
-    		mov	newcmd, dest
-		call	#sendcmd
-		call	#waitcmdclear
-		jmp	#nexti
-doiocog
-''		altd	rs1, #0
-''		mov	0-0, dest
-		jmp	#nexti
 
 do_wrword
 #ifdef CHECK_WRITES
@@ -523,14 +499,20 @@ sysinstr
 csrrw
 csrrs
 csrrc
-		mov	info1, #$C5
-		mov	info2, opcode
+		mov	info3, opcode
 		mov	dest, #0
 		cmp	opcode, ##$C00 wz, wc
-	if_nz	jmp	#illegalinstr
+	if_nz	jmp	#not_timer
 		getct	dest
 		jmp	#write_and_nexti
-
+not_timer
+		cmp	opcode, ##$BC0 wz
+	if_nz	jmp	#illegalinstr
+		alts	rs1, #x0
+		mov	newcmd, 0-0
+		call	#sendcmd
+		jmp	#nexti
+		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -653,7 +635,7 @@ div_by_zero
 
 checkdebug
 		tjz	stepcount, #checkdebug_ret
-		djnz	stepcount, #checkdebug_ret
+''		djnz	stepcount, #checkdebug_ret
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
@@ -664,7 +646,7 @@ checkdebug_ret	ret
 dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #38*4
+		mov	hubcnt, #40*4
 		getptr	shadowpc
 		call	#cogxfr_write
 dumpregs_ret
@@ -673,7 +655,7 @@ dumpregs_ret
 readregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #38*4
+		mov	hubcnt, #40*4
 		call	#cogxfr_read
 		rdfast	x0, shadowpc
 		mov	x0, #0		'
@@ -737,8 +719,10 @@ shadowpc	long	0
 opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info
-stepcount	long	1	' start in single step mode
+info3		long	0	' debug info
+info4		long	0	' debug info
 rununtil	long	0
+stepcount	long	1	' start in single step mode
 
 rd		long	0
 rs1		long	0

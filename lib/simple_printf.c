@@ -13,13 +13,8 @@
 
 #undef putchar
 #define putchar(c) putbyte(c)
-#define UART_TX 0x80000000U
 
-int putbyte(int c)
-{
-    *( (volatile unsigned int *)UART_TX) = (c<<4)|0xf;
-}
-
+extern void putbyte(int c);
 
 /*
  * very simple printf -- just understands a few format features

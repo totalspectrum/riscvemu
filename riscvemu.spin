@@ -419,9 +419,15 @@ sysinstr
 		add	funct3, #sysinstrtab
 		jmp	funct3
 
-csrrw
 csrrs
+		mov	divflags, #%011010_001	' use OR instruction
+		jmp	#do_csr
 csrrc
+		mov	divflags, #%011001_001	' use ANDN instruction
+		jmp	#do_csr
+csrrw
+		mov	divflags, #%101000_001	' use MOV instruction
+do_csr
 		mov	info1, opcode
 		mov	info2, rs1
 		mov	dest, #0
@@ -432,6 +438,9 @@ csrrc
 not_cycle
 		cmp	opcode, wait_reg wz, wc
 	if_nz	jmp	#not_wait
+		mov	dest, rs1
+		waitcnt	dest, #0
+		jmp	#write_and_nexti
 not_wait
 		cmp	opcode, uart_const wz,wc
 	if_nz	jmp	#not_uart
@@ -442,12 +451,13 @@ not_wait
 		call	#waitcmdclear
 		jmp	#nexti
 not_uart
-		'' FIXME: should use OR, ANDN for appropriate csrx instructions
-		and	opcode, cog_reg
-		cmp	opcode, cog_reg wz,wc
+		mov	temp, opcode
+		and	temp, cog_reg
+		cmp	temp, cog_reg wz,wc
 	if_nz	jmp	#not_cog
-		movs	:fetch, cog_reg
-		movd	:update, cog_reg
+		movi	:update, divflags	' set appropriate instruction
+		movs	:fetch, opcode
+		movd	:update, opcode
 :fetch		mov	dest, 0-0
 :update		mov	0-0, rs1
 		jmp	#write_and_nexti

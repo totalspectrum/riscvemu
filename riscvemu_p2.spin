@@ -639,7 +639,7 @@ div_by_zero
 
 checkdebug
 		tjz	stepcount, #checkdebug_ret
-''		djnz	stepcount, #checkdebug_ret
+		djnz	stepcount, #checkdebug_ret
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info

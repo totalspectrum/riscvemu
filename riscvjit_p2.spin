@@ -84,8 +84,8 @@ x11		djnz	x0,#x10
 
 x12		nop
 x13		nop
-x14		mov	x1, #0
-x15		jmp	#set_pc
+x14		nop
+x15		jmp	#startup
 
 x16		long	0[16]
 		'' these registers must immediately follow x0-x31
@@ -100,10 +100,22 @@ rununtil	long	0
 stepcount	long	1	' start in single step mode
 		
 		'' now start execution
-
+startup
+		mov	temp,#15
+.lp		altd	temp, #x2
+		mov	0-0, #0
+		djnz	temp, #.lp
+		
 set_pc
 #ifdef DEBUG
+		mov	info3, info2
+		mov	info2, info1
+		mov	info1, ptrb
 		call	#checkdebug
+		'' check for stack weirdness
+		mov	temp, x2
+		cmp	temp, ##$6800 wc,wz
+	if_c	call	#imp_illegal
 #endif
 		getbyte	tagaddr, ptrb, #0	' low 2 bits of ptrb must be 0
 		mov	tagidx, tagaddr
@@ -114,17 +126,6 @@ set_pc
 	if_z	add	ptrb, #4		' skip to next instruction
 	if_nz	call	#recompile
 		push	#set_pc
-#ifdef DEBUG
-		' DEBUG: show the tag info
-		rdlut	info1, tagaddr
-		add	tagaddr, #1
-		rdlut	info2, tagaddr
-		add	tagaddr, #1
-		mov	info3, tagidx
-		mov	info4, tagaddr
-		sub	tagaddr, #2
-		' END DEBUG
-#endif
 		add	tagaddr, CACHE_START
 		jmp	tagaddr
 
@@ -294,7 +295,7 @@ mul_templ
 sltfunc
 		'' sltfunc won't get used a lot, so put
 		'' the guts of it into hub
-		jmp    #@hub_sltfunc
+		jmp    #hub_sltfunc
 		
 sltfunc_pat
 		mov	0-0, #0
@@ -518,7 +519,7 @@ condbranch
 		add	cacheptr, #1
 		mov	opdata, ret_instr
 		andn	opdata, CONDMASK
-		ror	cmp_flag,#4		' get in high nibble
+		shl	cmp_flag,#28		' get in high nibble
 		or	opdata, cmp_flag
 		wrlut	opdata, cacheptr
 		add	cacheptr,#1
@@ -528,7 +529,7 @@ condbranch
 		'' in immval
 		andn 	immval, #$1f
 		or	immval, rd
-		test  	rd, #1 wc
+		test  	immval, #1 wc
 		bitc	immval, #11
 		andn	immval, #1
 		add	immval, ptrb

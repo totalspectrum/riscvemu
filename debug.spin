@@ -8,7 +8,8 @@ CON
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
   PROGBASE = $2000
-
+  BUFSIZ = 80
+  
 OBJ
 #ifdef __P2__
   ser: "SimpleSerial"
@@ -47,7 +48,10 @@ VAR
   long params[5]
   long cmdreg
 
-PUB demo | cmd, arg, c
+  ' scratch buffer
+  byte buf[BUFSIZ]
+
+PUB demo | cmd, arg, c, x
   ser.start(31, 30, 0, 115200)
   ser.str(string("Processor emulation", 13, 10))
   ser.str(string("starting emulation; base="))
@@ -71,7 +75,17 @@ PUB demo | cmd, arg, c
       c := waitforkey
       regs[36] := c
       if (c == "b")
-        regs[39] := 100 '' big step
+        nl
+	ser.str(string("Number of steps: "))
+	x := readNum
+	nl
+	ser.str(string("Stepping 0x"))
+	ser.hex(x, 8)
+	ser.str(string(" times"))
+	nl
+	if (x == 0)
+	  x := 1
+        regs[39] := x '' big step
       elseif (c == "c")
         regs[39] := 0   ' continue, no stepping
       else
@@ -89,6 +103,9 @@ PUB demo | cmd, arg, c
         ser.tx(arg)
     cmdreg := 0
 
+PUB pause
+  waitcnt(CNT + 20_000_000)
+  
 PRI nl
   ser.tx(13)
 ''  ser.tx(10)
@@ -127,3 +144,35 @@ PRI waitforkey | c
    c := ser.rx
    nl
    return c
+
+PUB readNum | c,x,i,scale
+  x := 0
+  i := 0
+  repeat while (i < BUFSIZ)
+    c := ser.rx
+    ser.tx(c)
+    if (c == 10 OR c == 13)
+        quit
+    elseif (c == 8 OR c == 127)
+        ser.tx(" ")
+	ser.tx(c)
+	if (i > 0)
+	  --i
+    else
+        buf[i++] := c
+  nl
+  scale := 1
+  repeat while (i > 0)
+    c := buf[--i]
+    if (c => "0" AND c =< "9")
+      x := x + scale*(c-"0")
+    elseif (c => "a" AND c =< "f")
+      x := x + scale*(10+c-"a")
+    else
+      ser.str("Bad character: ")
+      ser.tx(c)
+      nl
+    scale := scale * 16
+
+  return x
+  

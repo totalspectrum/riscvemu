@@ -8,6 +8,7 @@ direct mem access:
 fibo(8):  164368 cycles
 xxtea:    492720 cycles 
 fftbench: 630424 us
+dhry:        685/sec
 
 ============================================================================
 P2 results:
@@ -74,9 +75,11 @@ use csrrw for UART
 fibo(8):   74828 cycles
 xxtea:    207824 cycles 
 fftbench: 237913 us
+dhry:	    1521/sec
 
 =================================================
 P2 JIT
 fibo(8):   36202 cycles
 xxtea:     99312 cycles 
 fftbench: 100504 us
+dhry:       1220/sec

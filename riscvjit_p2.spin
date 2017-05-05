@@ -715,7 +715,9 @@ csrrw
 getct_instr
 		getct	0
 wrcmd_instr
-		mov	newcmd, 0
+		mov	newcmd, 0-0
+		shl	newcmd, #4
+		or	newcmd, #$F
 		jmp	#\sendcmd_and_wait
 
 		
@@ -837,16 +839,18 @@ hub_csrrw
   	mov	opptr, #getct_instr
 	call	#emit1
 	jmp	#emit_ret
+
 not_timer
 	cmp	immval, ##$BC0 wz
-  if_nz	jmp	#not_cmdreg
+  if_nz	jmp	#not_uart
    	cmp	rs1, #0 wz
   if_z	jmp	#emit_nop
   	sets	wrcmd_instr, rs1
 	mov	opptr, #wrcmd_instr
-	call	#emit2
+	call	#emit4
 	jmp	#emit_ret
-not_cmdreg
+
+not_uart
 	jmp	#illegalinstr
 
 	fit	$1f0

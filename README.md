@@ -6,31 +6,31 @@ An emulator for the RISC-V processor architecture, designed to run
 in a single Propeller COG. There's also a version for the Propeller 2.
 
 The instruction set emulated is RV32IM, mostly, except that the 64 bit
-multiplies are not yet implemented. The only CSR implemented is
+multiplies are not yet implemented. The only standard CSR implemented is
 the low 32 bits of the cycle counter (so rdcycle works, but rdcycleh does
-not).
+not). Some non-standard CSRs are used to access a UART emulation.
 
 riscvemu.spin is the actual emulator (the guts are in PASM, of course)
-riscvemu_p2.spin is the P2 version of the emulator
+riscvemu_p2.spin is a P2 version of the emulator
+riscvjit_p2.spin is an advanced P2 version that caches the results of
+    compilation.
 debug.spin is a top level test harness
 
-debug.spin includes test.bin, which should be the actual test program.
-This may be built with regular riscv tools; see for example the Makefiles
-in the test/, fibo/, and xxtea/ subdirectories.
+Generally we build debug.spin, pad it out to an 8K boundary, and then
+postpend a RISC-V binary. On the Propeller 1 we then have to fix up
+the binary checksum; this is done with the p1_chksum tool found in
+the tools/ directory. See for example the Makefiles
+in the fftbench/, fibo/, and xxtea/ subdirectories.
 
-To build, use openspin or fastspin for the Propeller1, and fastspin -2 for
-the Propeller 2. You'll need fastspin version 3.6.2 or later for P2
-support; earlier versions had some bugs that cause the emulator not to
-work properly. My workflow on P2 looks something like this:
-```
-   # recompile fibo
-   cd fibo
-   make
-   cp fibo.bin ../test.bin
-   cd ..
-   fastspin -2 debug.spin
-   loadp2 /dev/ttyUSB0 debug.binary -t
-```
+The RISC-V binary should be linked to start at address 8192 (0x2000).
+See the Makefiles for examples of how to do this.
+
+To build, I suggest using the Makefiles in the various subdirectories.
+These produce two binaries, p1.binary and p2.binary, which are the
+downloadables for Propeller1 and Propeller2 respectively. You can use
+propeller-load or the Propeller Tool to load the p1.binary. On
+P2 I use Dave Hein's loadp2 program.
+
 The interface is pretty simple: the params array passed to the start
 method should contain:
 ```   
@@ -38,7 +38,7 @@ method should contain:
    params[1] = base of emulated memory
    params[2] = size of emulated memory (stack will start at base + size and grow down)
    params[3] = initial pc (usually 0)
-   params[4] = address for register dump (38 longs; x0-x31, pc, opcode, dbg1, dbg2, stepcount, reserved)
+   params[4] = address for register dump (40 longs; x0-x31, pc, opcode, dbg1, dbg2, dbg3, dbg4, reserved, stepcount)
 ```
 
 The register dump should have 40 longs. The first 32 are the RISC-V general
@@ -48,8 +48,10 @@ purpose registers x0-x31. The others are:
   reg[33]: current opcode
   reg[34]: debug info1
   reg[35]: debug info2
-  reg[36]: stepcount (for single stepping; 0 = run continuously)
-  reg[37-39]: reserved
+  reg[36]: debug info3
+  reg[37]: debug info4
+  reg[38]: reserved
+  reg[39]: stepcount (for single stepping; 0 = run continuously)
 ```
 
 The command register is used for communication from the RISC-V back to the host.
@@ -63,13 +65,14 @@ The lowest 4 bits contain a command, as follows:
 The host should write 0 to the command register as an "ACK" to restart
 the RISC-V. When it does so, the registers will be re-read. If the
 `stepcount` field is non-zero then the emulated processor will step
-this many times before stopping again.
+this many times before stopping again. If it is 0 it will run continuously.
    
 ---------------------------------------------------------------------
-Emulated memory map:
+Emulated CSRs:
 ```
-  0000_0000 - 0000_xxxx: RAM (0 is membase)
-  F000_0000 - FFFF_FFFF: I/O space:
-     F000_0000 = command register; writes here go to the host command register
-     F000_0004 - F000_07FC = COG memory space (useful for accessing COG registers like CNT and OUTA)
+  C00 - cycle counter
+  BC0 - uart register; bytes written here go to the serial port
+  BC1 - wait register; if a value is written here we wait until the
+        cycle counter matches it
+  7Fx - COG registers 1F0 - 1FF
 ```

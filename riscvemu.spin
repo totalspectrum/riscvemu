@@ -27,6 +27,7 @@
   or special registers use the CSR instructions. CSRs we know about:
      7Fx - COG registers 1F0-1FF
      BC0 - UART register
+     BC1 - wait register
      C00 - cycle counter   
 }}
 
@@ -429,17 +430,34 @@ csrrc
 		mov	dest, CNT
 		jmp	#write_and_nexti
 not_cycle
+		cmp	opcode, wait_reg wz, wc
+	if_nz	jmp	#not_wait
+not_wait
 		cmp	opcode, uart_const wz,wc
 	if_nz	jmp	#not_uart
+		shl	rs1, #4
+		or	rs1, #$F
 		mov	newcmd, rs1
 		call	#sendcmd
 		call	#waitcmdclear
 		jmp	#nexti
 not_uart
+		'' FIXME: should use OR, ANDN for appropriate csrx instructions
+		and	opcode, cog_reg
+		cmp	opcode, cog_reg wz,wc
+	if_nz	jmp	#not_cog
+		movs	:fetch, cog_reg
+		movd	:update, cog_reg
+:fetch		mov	dest, 0-0
+:update		mov	0-0, rs1
+		jmp	#write_and_nexti
+not_cog
 		jmp	#illegalinstr
 		
 cycle_const	long	$C00
 uart_const	long	$BC0
+wait_reg        long    $BC1
+cog_reg         long    $7F0
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches

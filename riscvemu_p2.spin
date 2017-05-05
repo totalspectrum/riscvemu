@@ -507,12 +507,16 @@ csrrc
 		jmp	#write_and_nexti
 not_timer
 		cmp	opcode, ##$BC0 wz
-	if_nz	jmp	#illegalinstr
+	if_nz	jmp	#not_uart
 		alts	rs1, #x0
 		mov	newcmd, 0-0
+		shl	newcmd, #4
+		or	newcmd, #$F
 		call	#sendcmd
 		jmp	#nexti
-		
+not_uart
+		jmp	#illegalinstr
+
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''

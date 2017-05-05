@@ -15,6 +15,8 @@ START=$(LIB)start.o
 LINKFILE=$(LIB)flat.ld
 SPIN2CPP=/home/ersmith/Parallax/spin2cpp/build/spin2cpp
 
+STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
+
 OBJS=$(START) $(PROGOBJS) $(LIBOBJS)
 
 all: p1.binary p2.binary
@@ -33,8 +35,6 @@ p2.binary: $(PROG).bin p2header.bin
 
 clean:
 	rm -rf *.o *.elf *.lst *.bin *.binary
-
-STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin
 
 p1header.bin: $(STUBSRC)
 	$(SPIN2CPP) --code=hub --data=hub --asm --binary -o p1header.bin ../debug.spin

@@ -4,6 +4,10 @@ fibo(8):  167072 cycles size of fibo=100 bytes
 xxtea:    497824 cycles size of btea=532 bytes
 fftbench: 637600 us     size of fft_bench=784 bytes
 
+direct mem access:
+fibo(8):  164368 cycles
+xxtea:    492720 cycles 
+fftbench: 630424 us
 
 ============================================================================
 P2 results:
@@ -68,5 +72,5 @@ fftbench: 241577 us
 
 use csrrw for UART
 fibo(8):   74828 cycles
-xxtea:    207820 cycles 
-fftbench: 237912 us
+xxtea:    207824 cycles 
+fftbench: 237913 us

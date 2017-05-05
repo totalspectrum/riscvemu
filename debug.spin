@@ -10,10 +10,11 @@ CON
   PROGBASE = $2000
 
 OBJ
-  ser: "SimpleSerial"
 #ifdef __P2__
+  ser: "SimpleSerial"
   proc: "riscvemu_p2.spin"
 #else
+  ser: "FullDuplexSerial"
   proc: "riscvemu.spin"
 #endif
 
@@ -67,6 +68,7 @@ PUB demo | cmd, arg, c
       ser.str(string("*** step ***", 13, 10))
       dumpregs
       c := waitforkey
+      regs[36] := c
       if (c == "b")
         regs[39] := 100 '' big step
       elseif (c == "c")
@@ -107,7 +109,7 @@ PRI dumpregs | i,j
   ser.hex(regs[32], 8)
   ser.str(string(" dbg="))
   ser.hex(regs[33], 8)
-  ser.str(string(" info1: "))
+  ser.str(string(" info: "))
   ser.hex(regs[34], 8)
   ser.str(string(" "))
   ser.hex(regs[35], 8)
@@ -115,6 +117,8 @@ PRI dumpregs | i,j
   ser.hex(regs[36], 8)
   ser.str(string(" "))
   ser.hex(regs[37], 8)
+  ser.str(string(" step "))
+  ser.hex(regs[39], 8)
   nl
 
 PRI waitforkey | c

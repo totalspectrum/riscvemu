@@ -12,8 +12,8 @@
    params[0] = address of command register
    params[1] = base of emulated memory
    params[2] = size of emulated memory (stack will start at base + size and grow down)
-   params[3] = initial pc (usually 0)
-   params[4] = address for register dump (36 longs; x0-x31, pc, opcode, dbg1, dbg3)
+   params[3] = initial pc (usually membase)
+   params[4] = address for register dump (40 longs; x0-x31, pc, opcode, 4xdebug, 2xstep control)
 
    The command register is used for communication from the RISC-V back to the host.
    The lowest 4 bits contain a command, as follows:
@@ -23,12 +23,11 @@
 
    The host should write 0 to the command register as an "ACK" to restart the RISC-V.
   ---------------------------------------------------------------------
-  Emulated memory map:
-  0000_0000 - 0000_xxxx: RAM (0 is membase)
-  F000_0000 - FFFF_FFFF: I/O space:
-     F000_0000 = command register; writes here go to the host command register
-     F000_0004 - F000_07FC = COG memory space (useful for accessing COG registers like CNT and OUTA)
-   
+  Reads and writes go directly to the host HUB memory. To access COG memory
+  or special registers use the CSR instructions. CSRs we know about:
+     7Fx - COG registers 1F0-1FF
+     BC0 - UART register
+     C00 - cycle counter   
 }}
 
 VAR
@@ -120,7 +119,6 @@ init
 		add	temp, #4
 		rdlong	pc, temp
 		add	temp, #4
-		add	pc, membase
 		mov	x0+2,membase
 		add	x0+2,memsize
 		rdlong	dbgreg_addr, temp
@@ -158,8 +156,8 @@ nexti
 illegalinstr
 		call	#dumpregs
 		mov	newcmd, #2	' signal illegal instruction
-		call	#waitcmdclear
 		call	#sendcmd
+		call	#waitcmdclear
 		jmp	#nexti
 
 
@@ -281,7 +279,6 @@ auipc
 		mov	dest, opcode
 		and	dest, luimask
 		add	dest, pc
-		sub	dest, membase
 		sub	dest, #4
 		jmp	#write_and_nexti
 
@@ -299,10 +296,8 @@ jal
 		test	temp, #1 wc	' check old bit 20
 		andn	temp, #1 	' clear low bit
 		muxc	temp, bit11	' set bit 11
-		sub	pc, membase	' and for offset
 		mov	dest, pc		' save old pc
 		sub	pc, #4		' compensate for pc bump
-		add	pc, membase
 		add	pc, temp
 		jmp	#write_and_nexti
 
@@ -310,10 +305,8 @@ jalr
 		call	#getrs1
 		sar	opcode, #20	' get offset
 		movs	:jalfetch, rs1
-		sub	pc, membase
 		mov	dest, pc	' save old pc
 :jalfetch	mov	pc, 0-0		' fetch rs1 value
-		add	pc, membase
 		add	pc, opcode
 		jmp	#write_and_nexti
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -344,35 +337,19 @@ loadop
 
 		'' sign bit was set above
 do_rdbyte
-		add	dest, membase
 		rdbyte	dest, dest
 	if_z	shl	dest, #24	' if z bit set, sign extend
 	if_z	sar	dest, #24
 		jmp	#write_and_nexti
 do_rdword
-		add	dest, membase
 		rdword	dest, dest
 	if_z	shl	dest, #16	' if z bit set, sign extend
 	if_z	sar	dest, #16
 		jmp	#write_and_nexti
 do_rdlong
-		mov	info1, #$C1
-		mov	info2, dest		
-		test	dest, iobase wz
-	if_nz	jmp	#read_io
-		add	dest, membase
 		rdlong	dest, dest
 		jmp	#write_and_nexti
 
-read_io
-		mov	info1, #$C2
-		'' read from COG memory
-		shr	dest, #2	' convert from bytes to longs
-		movs	:readcog, dest
-		nop
-:readcog	mov	dest, 0-0
-		jmp	#write_and_nexti
-		
 		''
 		'' re-order bits of opcode so that it is
 		'' an s-type immediate value
@@ -409,34 +386,14 @@ storeop
 		add	rs1, opcode	' find address
 		jmp	funct3		' go do store
 
-iobase		long	$f0000000
 do_wrlong
-		test	rs1, iobase wz
-    if_nz	jmp	#write_io
-		add	rs1, membase
 		wrlong	dest, rs1
 		jmp	#nexti		' no writeback
-		'' handle special IO stuff
-write_io
-		andn	rs1, iobase
-		shr	rs1, #2 wz
-    if_nz	jmp	#doiocog
-    		mov	newcmd, dest
-		call	#sendcmd
-		call	#waitcmdclear
-		jmp	#nexti
-doiocog
-		movd	:writecog, rs1
-		nop
-:writecog	mov	0-0, dest
-		jmp	#nexti
 
 do_wrword
-		add	rs1, membase
 		wrword	dest, rs1
 		jmp	#nexti		' no writeback
 do_wrbyte
-		add	rs1, membase
 		wrbyte	dest, rs1
 		jmp	#nexti		' no writeback
 
@@ -454,7 +411,9 @@ sysinstrtab
 		jmp	#illegalinstr
 sysinstr
 		call	#getrs1
+		movs	:getr, rs1
 		call	#getfunct3
+:getr		mov	rs1, 0-0
 		shr	opcode, #20	' extract CSR address
 		add	funct3, #sysinstrtab
 		jmp	funct3
@@ -462,15 +421,25 @@ sysinstr
 csrrw
 csrrs
 csrrc
-		mov	info1, #$C5
-		mov	info2, opcode
+		mov	info1, opcode
+		mov	info2, rs1
 		mov	dest, #0
 		cmp	opcode, cycle_const wz, wc
-	if_nz	jmp	#illegalinstr
+	if_nz	jmp	#not_cycle
 		mov	dest, CNT
 		jmp	#write_and_nexti
-
+not_cycle
+		cmp	opcode, uart_const wz,wc
+	if_nz	jmp	#not_uart
+		mov	newcmd, rs1
+		call	#sendcmd
+		call	#waitcmdclear
+		jmp	#nexti
+not_uart
+		jmp	#illegalinstr
+		
 cycle_const	long	$C00
+uart_const	long	$BC0
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
@@ -617,19 +586,16 @@ checkdebug_ret	ret
 dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #38*4
-		sub	pc, membase	' adjust for VM
+		mov	hubcnt, #40*4
 		call	#cogxfr_write
-		add	pc, membase	' adjust for VM
 dumpregs_ret
 		ret
 
 readregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #38*4
+		mov	hubcnt, #40*4
 		call	#cogxfr_read
-		add	pc, membase	' adjust for VM
 		mov	x0, #0		'
 readregs_ret
 		ret
@@ -638,6 +604,7 @@ newcmd		long 0
 sendcmd
 		call	#waitcmdclear
 		wrlong	newcmd, cmd_addr
+		call	#waitcmdclear
 sendcmd_ret	ret
 		
 waitcmdclear
@@ -654,56 +621,31 @@ waitcmdclear_ret
 ' "cogaddr"   is the COG memory address
 ' "hubcnt"    is the number of *bytes* to transfer
 ' '
-' The idea is based on code posted by Kuroneko in the
-' "Fastest possible memory transfer" thread on the
-' Parallax forums, modified slightly for arbitrary buffers.
-' Note that the number of longs must be a multiple of 2
 '------------------------------------------------------------------------------
-
-' NOTE: the instructions at lbuf0 and lbuf1 can be destroyed if
-' we count down below 0 (where the cache starts) so we have to
-' refresh them each time
-' we have to set up for read/write anyway, so this isn't too big
-' a deal
-
-wrins		wrlong	0-0, hubaddr
+incdst		long	(1<<9)
 
 cogxfr_write
-		mov	lbuf0, wrins
-		jmp	#doxfer
-
-rdins	   	rdlong	0-0, hubaddr
-cogxfr_read
-  		mov	lbuf0, rdins
-doxfer
-		mov	lbuf1, lbuf0
-		add	hubcnt, #7
-		andn	hubcnt, #7	' round up
-		' point to last byte in HUB buffer
-		add	hubaddr, hubcnt
-		sub	hubaddr, #1
-		' point to last longs in cog memory
-		shr	hubcnt, #2      ' convert to longs
-		add	cogaddr, hubcnt
-		sub	cogaddr, #1
-		movd	lbuf0, cogaddr
-		sub	cogaddr, #1
-		movd	lbuf1, cogaddr
-		sub	hubcnt, #2
-		movi	hubaddr, hubcnt	' set high bits of hub address
-
-lbuf0		rdlong	0-0, hubaddr
-		sub	lbuf0, dst2
-		sub	hubaddr, i2s7 wc
-lbuf1		rdlong  0-0, hubaddr
-		sub	lbuf1, dst2
-if_nc		djnz	hubaddr, #lbuf0
-cogxfr_read_ret
+		movd	:wrins, cogaddr
+		shr	hubcnt, #2
+:wrins
+		wrlong	0-0, hubaddr
+		add	:wrins, incdst
+		add	hubaddr, #4
+		djnz	hubcnt, #:wrins
 cogxfr_write_ret
 		ret
-		'' initialized data and presets
-dst2		long	2 << 9
-i2s7		long	(2<<23) | 7
+
+cogxfr_read
+		movd	:rdins, cogaddr
+		shr	hubcnt, #2
+:rdins
+		rdlong	0-0, hubaddr
+		add	:rdins, incdst
+		add	hubaddr, #4
+		djnz	hubcnt, #:rdins
+cogxfr_read_ret
+		ret
+
 
 temp		long 0
 dest		long 0
@@ -720,12 +662,16 @@ hubcnt		long 0
 		'' pc must follow x0-x31
 		'' next one after is also displayed in debug
 x0		long	0[32]
+
 pc		long	0
 opcode		long	0
-info1		long	0	' debug info
+info1		long	1	' debug info
 info2		long	0	' debug info
-stepcount	long	1	' start up in single step
+
+info3		long	0	' debug info
+info4		long	0	' debug info
 rununtil	long	0
+stepcount	long	1	' start up in single step
 
 rd		long	0
 rs1		long	0

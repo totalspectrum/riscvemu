@@ -45,8 +45,40 @@ PUB stop
 DAT
 		org 0
 enter
+		'' initialization code is overlayed on the
+		'' registers
+x0		nop			' want x0 == 0 always
+x1		mov	temp, par
+x2		rdlong	cmd_addr, temp
+x3		add	temp, #4
+x4		rdlong	membase, temp
+x5		add	temp, #4
+x6		rdlong	memsize, temp
+x7		add	temp, #4
+x8		rdlong	pc, temp
+x9		add	temp, #4
+x10		mov	x0+2,membase
+x11		add	x0+2,memsize
+x12		rdlong	dbgreg_addr, temp
+x13		nop
+x14		nop
+x15		jmp	#nexti
+x16		long	0[16]		
+		'' debug registers
+		'' pc must follow x0-x31
+
+pc		long	0
+opcode		long	0
+info1		long	1	' debug info
+info2		long	0	' debug info
+
+info3		long	0	' debug info
+info4		long	0	' debug info
+rununtil	long	0
+stepcount	long	1	' start up in single step
+
 opcodetab
-{00}		jmp	#init		' replaced with load instruction
+{00}		jmp	#loadop		' replaced with load instruction
 {01}		jmp	#illegalinstr	' float load
 {02}		jmp	#illegalinstr	' custom0
 {03}		jmp	#illegalinstr	' fence
@@ -82,8 +114,6 @@ opcodetab
 {1E}		jmp	#illegalinstr	' custom3
 {1F}		jmp	#illegalinstr
 
-opcode0entry
-		jmp	#loadop		'' load
 ''
 '' table for "regular" math operations
 '' note that if bits 31..25 of the opcode == 1, we should use
@@ -109,22 +139,6 @@ multab
 {6}		jmp	#imp_rem
 {7}		jmp	#imp_remu
 
-init
-		mov	opcodetab, opcode0entry
-		mov	temp, par
-		rdlong	cmd_addr, temp
-		add	temp, #4
-		rdlong	membase, temp
-		add	temp, #4
-		rdlong	memsize, temp
-		add	temp, #4
-		rdlong	pc, temp
-		add	temp, #4
-		mov	x0+2,membase
-		add	x0+2,memsize
-		rdlong	dbgreg_addr, temp
-		jmp	#nexti
-		
 		''
 		'' main instruction decode loop
 		''
@@ -686,20 +700,6 @@ hubaddr		long 0
 cogaddr		long 0
 hubcnt		long 0
 
-		'' registers
-		'' pc must follow x0-x31
-		'' next one after is also displayed in debug
-x0		long	0[32]
-
-pc		long	0
-opcode		long	0
-info1		long	1	' debug info
-info2		long	0	' debug info
-
-info3		long	0	' debug info
-info4		long	0	' debug info
-rununtil	long	0
-stepcount	long	1	' start up in single step
 
 rd		long	0
 rs1		long	0

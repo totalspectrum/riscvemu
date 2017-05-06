@@ -157,11 +157,11 @@ nexti
 		'' that means nonzero, even parity on those two bits
 		test	opcode, #3 wz,wc
    if_c_or_z	jmp	#illegalinstr
-   		mov	temp, opcode
-		shr	temp, #7
-		and	temp, #$1f wz
-   if_z		mov	temp, #dest	' writes to x0 get ignored
-   		movd	write_and_nexti, temp
+   		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f wz
+   		movd	write_and_nexti, rd
+   if_z		movd	write_and_nexti, #dest	' writes to x0 get ignored
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f
@@ -178,30 +178,28 @@ illegalinstr
 
 
 		''
-		'' utility: extract rs1 field from opcode
+		'' utility: extract rs2 field from opcode
 		'' NOTE: does not actually read value from register
 		''
-getrs1
-		mov	rs1, opcode
-		shr	rs1, #15
-		and	rs1, #$1f
-getrs1_ret	ret
-
-
 getrs2
 		mov	rs2, opcode
 		sar	rs2, #20
 		and	rs2, #$1f
 getrs2_ret	ret
 
-
-		'' extract funct3 field
-getfunct3
+		''
+		'' extract both rs1 and funct fields
+		''
+getrs1_funct3
+		mov	rs1, opcode
+		shr	rs1, #15
+		and	rs1, #$1f
 		mov	funct3, opcode
 		shr	funct3, #12
 		and	funct3, #7
-getfunct3_ret
+getrs1_funct3_ret
 		ret
+
 
 mulbit		long	(1<<25)
 
@@ -229,11 +227,10 @@ immediateop
 		'' and with desth containing the table to use
 		'' (generic mathtab, or multab)
 domath
-		call	#getrs1
+		call	#getrs1_funct3
 		movs	:exec1, rs1
-		call	#getfunct3
-:exec1		mov	dest, 0-0		' load rs1 into dest
 		add	funct3, desth		' funct3 pts at instruction
+:exec1		mov	dest, 0-0		' load rs1 into dest
 
 		'' actually execute the decoded instruction here
 		jmp	funct3
@@ -316,7 +313,10 @@ jal
 		jmp	#write_and_nexti
 
 jalr
-		call	#getrs1
+		' get rs1
+		mov	rs1, opcode
+		shr	rs1, #15
+		and	rs1, #$1f
 		sar	opcode, #20	' get offset
 		movs	:jalfetch, rs1
 		mov	dest, pc	' save old pc
@@ -338,11 +338,10 @@ loadtab
 		jmp	#illegalinstr
 		
 loadop
-		call	#getrs1
+		call	#getrs1_funct3
 		movs	:set, rs1
-		call	#getfunct3
-:set		mov	dest, 0-0	' set dest to value of rs1
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
+:set		mov	dest, 0-0	' set dest to value of rs1
 		and	funct3, #3
 		add	funct3, #loadtab
 		sar	opcode, #20	' extract immediate
@@ -385,9 +384,8 @@ storetab
 storeop
 		call	#getrs2
 		movs	:set1, rs2
-		call	#getrs1
+		call	#getrs1_funct3
 		movs	:set2, rs1
-		call	#getfunct3
 :set1		mov	dest, 0-0	' set dest to value of rs2 (value to store)
 :set2		mov	rs1, 0-0	' set rs1 to address of memory
 		test	funct3, #4 wz	' check for signed/unsigned; Z is set for signed
@@ -424,11 +422,10 @@ sysinstrtab
 		jmp	#illegalinstr
 		jmp	#illegalinstr
 sysinstr
-		call	#getrs1
+		call	#getrs1_funct3
 		movs	:getr, rs1
-		call	#getfunct3
-:getr		mov	rs1, 0-0
 		shr	opcode, #20	' extract CSR address
+:getr		mov	rs1, 0-0
 		add	funct3, #sysinstrtab
 		jmp	funct3
 
@@ -486,13 +483,12 @@ cog_reg         long    $7F0
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 condbranch
-		call	#getrs1
+		call	#getrs1_funct3
 		movs	:bfetch1, rs1
 		call	#getrs2
 		movs	:bfetch2, rs2
 :bfetch1	mov	rs1, 0-0
 :bfetch2	mov	rs2, 0-0
-		call	#getfunct3
 		call	#get_s_imm	' opcode now contains s-type immediate
 		test	opcode, #1 wc	' get low bit into carry
 		muxc	opcode, bit11	' copy up to bit 11

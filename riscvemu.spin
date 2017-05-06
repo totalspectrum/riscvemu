@@ -366,13 +366,13 @@ do_rdlong
 		''
 		'' re-order bits of opcode so that it is
 		'' an s-type immediate value
+		'' assumes we have already decoded rd (which
+		'' we always do)
+		''
 get_s_imm
-		mov	temp, opcode
-		shr	temp, #7
-		and	temp, #$1f
 		sar	opcode, #20
 		andn	opcode, #$1f
-		or	opcode, temp	' opcode has offset
+		or	opcode, rd	' opcode has offset
 get_s_imm_ret	ret
 
 storetab

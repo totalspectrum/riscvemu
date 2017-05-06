@@ -148,7 +148,9 @@ write_and_nexti
 		mov	0-0, dest
 nexti
 		rdlong	opcode, pc
-'''		call	#checkdebug
+#ifdef DEBUG
+		call	#checkdebug
+#endif
 		add	pc, #4
 		'' check for valid opcodes
 		'' the two lower bits must be 11
@@ -158,7 +160,6 @@ nexti
    		mov	temp, opcode
 		shr	temp, #7
 		and	temp, #$1f wz
-		add	temp, #x0
    if_z		mov	temp, #dest	' writes to x0 get ignored
    		movd	write_and_nexti, temp
 		mov	temp, opcode
@@ -184,7 +185,6 @@ getrs1
 		mov	rs1, opcode
 		shr	rs1, #15
 		and	rs1, #$1f
-		add	rs1, #x0
 getrs1_ret	ret
 
 
@@ -192,7 +192,6 @@ getrs2
 		mov	rs2, opcode
 		sar	rs2, #20
 		and	rs2, #$1f
-		add	rs2, #x0
 getrs2_ret	ret
 
 

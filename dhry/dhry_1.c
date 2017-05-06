@@ -56,7 +56,7 @@ extern  int     times ();
 #endif
 #ifdef GETMS
 extern unsigned int getms();
-#define Too_Small_Time 200
+#define Too_Small_Time 2000
 #endif
 #ifdef TIME
 extern long     time();
@@ -273,13 +273,14 @@ main ()
 
   if (User_Time < Too_Small_Time)
   {
-    printf ("Measured time too small to obtain meaningful results\n");
+    printf ("Measured time (%lu) too small to obtain meaningful results\n", User_Time);
     printf ("Please increase number of runs\n");
     printf ("\n");
   }
   else
   {
 #ifdef GETMS
+      printf("Elapsed time: %lu ms\n", User_Time);
       Dhrystones_Per_Second = 1000 * Number_Of_Runs / User_Time;
       printf ("Dhrystones per Second: %lu\n", Dhrystones_Per_Second);
 #else

@@ -5,7 +5,7 @@ LIB=../lib/
 LD=$(TOOLS)riscv32-unknown-elf-ld
 
 CC=$(TOOLS)riscv32-unknown-elf-gcc
-CFLAGS=-Os -march=rv32im -DGETMS
+CFLAGS=-Os -march=rv32im -DGETMS -DCOUNT=6000
 
 PROG=dhry
 PROGOBJS=dhry_1.o dhry_2.o dummymalloc.o

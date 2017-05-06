@@ -10,6 +10,12 @@ xxtea:    492720 cycles
 fftbench: 630424 us
 dhry:        685/sec
 
+registers at 0:
+fibo(8):  156208 cycles
+xxtea:    464160 cycles 
+fftbench: 593289 us
+dhry:        712/sec
+
 ============================================================================
 P2 results:
 

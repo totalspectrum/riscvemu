@@ -243,8 +243,12 @@ imp_add
 		jmp	#write_and_nexti
 imp_addsub
 		test	opcode, sra_mask wz
+#ifdef OLDWAY
 	if_z	add	dest, rs2
 	if_nz	sub	dest, rs2
+#else
+		sumnz	dest, rs2
+#endif
 		jmp	#write_and_nexti
 
 imp_sll		shl	dest, rs2
@@ -255,9 +259,11 @@ imp_slt		cmps	dest, rs2 wz,wc
   if_b		mov	dest, #1
   		jmp	#write_and_nexti
 imp_sltu	cmp	dest, rs2 wz,wc
-		jmp	#imp_slt+1
+		mov	dest, #0
+  if_b		mov	dest, #1
+		jmp	#write_and_nexti
 imp_xor
-		xor	dest, rs2	' FIXME
+		xor	dest, rs2
 		jmp	#write_and_nexti
 imp_shr
 		'' depending on opcode we do sar or shr

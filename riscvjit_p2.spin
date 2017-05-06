@@ -28,6 +28,7 @@
   or special registers use the CSR instructions. CSRs we know about:
      7Fx - COG registers 1F0-1FF
      BC0 - UART register
+     BC1 - wait register
      C00 - cycle counter
 
   Theory of operation:
@@ -246,6 +247,7 @@ notemp
 		'' now do the operation
 		sets	opdata, rs2
 		setd  	opdata, rd
+emit_opdata_and_ret
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1
 		jmp	#emit_ret
@@ -276,6 +278,7 @@ muldiv
 	mov	mul_templ+2, temp
 	setd	mul_templ+3, rd
 	mov	opptr, #mul_templ
+emit4_and_ret
 	call	#emit4
 	jmp	#emit_ret
 	
@@ -293,9 +296,31 @@ mul_templ
 ''     muxc	rd, #1
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 sltfunc
-		'' sltfunc won't get used a lot, so put
-		'' the guts of it into hub
-		jmp    #hub_sltfunc
+		cmp	rd, #0	wz	' if rd == 0, emit nop
+	if_z	jmp	#\emit_nop
+	
+		and	opdata, #$1ff	' zero out source
+		setd	sltfunc_pat, rd
+		setd	sltfunc_pat+1, rd
+		'' check for immediate
+		test	opcode, #$20 wz
+	if_nz	jmp	#slt_reg
+	
+		'' set up cmp with immediate here	
+		bith	opdata, #IMM_BITNUM
+		mov	dest, rs1
+		call	#emit_big_instr	' cmp rs1, ##immval
+		jmp	#slt_fini
+slt_reg
+		'' for reg<->reg, output cmp rs1, rs2
+		sets	opdata, rs2
+		setd	opdata, rs1
+		wrlut	opdata, cacheptr
+		add	cacheptr, #1
+slt_fini
+		mov	opptr, sltfunc_pat
+		call	#emit2
+		jmp	#emit_ret
 		
 sltfunc_pat
 		mov	0-0, #0
@@ -326,10 +351,9 @@ recompile
 	getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
-		call	temp
+		jmp	temp
+		'' from temp we will return back 
 
-		'' ok, compilation finished, restart
-		ret
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
@@ -364,9 +388,11 @@ ldst_common
 		bith	immval, #23	' set to force ptra relative
 
 		'' check for sign extend
-		mov	signmask, opdata
+		'' the dest field of opdata will have the mask we
+		'' should use to sign extend, or 0 for no sign extension
+		mov	signmask, opdata ' save potential sign mask
 		shr	signmask, #9
-		and	signmask, #$1ff
+		and	signmask, #$1ff wz
 		mov	dest, rd
 		call	#emit_big_instr
 		cmp	signmask, #0 wz
@@ -710,11 +736,84 @@ imp_div
 ' system instructions
 '=========================================================================
 
+''
+'' the register read/write routines
+'' these basically look like:
+''    mov rd, <reg>
+''    op  <reg>, rs1
+''
 csrrw
-		jmp	#@hub_csrrw
+		mov	funct3, immval
+		shr	funct3, #8
+		and	funct3, #$f	' select upper nybble
+		and	immval, #$1FF
+
+		'' check for COG I/O e.g. 7f4
+		cmp	funct3, #7 wz
+	if_nz	jmp	#not_cog
+
+		'' first, emit a mov to get the old register value
+		cmp	rd, #0 wz
+	if_z	jmp	#skip_rd
+		setd	mov_pat, rd
+		sets	mov_pat, immval
+		wrlut	mov_pat, cacheptr
+		add	cacheptr, #1
+skip_rd
+		'' now emit the real operation
+		setd	opdata, immval
+		sets	opdata, rs1
+		jmp	#emit_opdata_and_ret
+not_cog
+		'' check for standard read-only regs
+		cmp	funct3, #$C wz
+	if_nz	jmp	#not_standard
+
+		'' write to 0? that's a no-op
+	    	cmp	rd, #0 wz
+	if_z	jmp	#emit_nop
+
+		'' $c00 == mcount (cycles counter)
+		cmp	immval, #0 wz
+	if_nz	jmp	#illegalinstr
+
+		mov	opdata, getct_instr
+  		setd	opdata, rd
+		jmp	#emit_opdata_and_ret
+
+		'' here's where we do our non-standard registers
+		'' BC0 == UART
+not_standard
+		cmp	#funct3, #$B wz	' is it one of ours?
+	if_nz	jmp	#illegalinstr
+	
+		cmp	immval, #$1C0 wz
+	if_nz	jmp	#not_uart
+
+		'' if rs1 is x0, skip any writes
+   		cmp	rs1, #0 wz
+	if_z	jmp	#emit_nop
+	
+		'' implement uart
+  		sets	wrcmd_instr, rs1
+		mov	opptr, #wrcmd_instr
+		jmp	#emit4_and_ret
+not_uart
+		cmp	immval, #$1C1 wz
+	if_nz	jmp	#not_wait
+		setd	waitcnt_instr, rs1
+		mov	opptr, #waitcnt_instr
+		call	#emit2
+		jmp	#emit_ret
+not_wait
+		jmp	#illegalinstr
+
 
 getct_instr
-		getct	0
+		getct	0-0
+waitcnt_instr
+		addct1 0-0, #0
+		waitct1
 wrcmd_instr
 		mov	newcmd, 0-0
 		shl	newcmd, #4
@@ -795,63 +894,5 @@ end_of_tables
 '' some lesser used routines we wanted to put in HUB
 '' but as presently organized, that's difficult :(
 ''
-
-'' compile slt, sltu
-hub_sltfunc
-		cmp	rd, #0	wz	' if rd == 0, emit nop
-	if_z	jmp	#\emit_nop
-	
-		and	opdata, #$1ff	' zero out source
-		setd	sltfunc_pat, rd
-		setd	sltfunc_pat+1, rd
-		'' check for immediate
-		test	opcode, #$20 wz
-	if_nz	jmp	#slt_reg
-	
-		'' set up cmp with immediate here	
-		bith	opdata, #IMM_BITNUM
-		mov	dest, rs1
-		call	#emit_big_instr	' cmp rs1, ##immval
-		jmp	#slt_fini
-slt_reg
-		'' for reg<->reg, output cmp rs1, rs2
-		sets	opdata, rs2
-		setd	opdata, rs1
-		wrlut	opdata, cacheptr
-		add	cacheptr, #1
-slt_fini
-		mov	opptr, sltfunc_pat
-		call	#emit2
-		jmp	#emit_ret
-
-''
-'' the register read/write routines
-'' these basically look like:
-''    mov rd, <reg>
-''    op  <reg>, rs1
-''
-hub_csrrw
-	and	immval, ##$FFF
-	cmp	immval, ##$C00 wz
-  if_nz	jmp	#not_timer
-  	cmp	rd, #0 wz
-  if_z	jmp	#emit_nop
-  	setd	getct_instr, rd
-  	mov	opptr, #getct_instr
-	call	#emit1
-	jmp	#emit_ret
-
-not_timer
-	cmp	immval, ##$BC0 wz
-  if_nz	jmp	#not_uart
-   	cmp	rs1, #0 wz
-  if_z	jmp	#emit_nop
-  	sets	wrcmd_instr, rs1
-	mov	opptr, #wrcmd_instr
-	call	#emit4
-	jmp	#emit_ret
-
-not_uart
-	jmp	#illegalinstr
 
 	fit	$1f0

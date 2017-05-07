@@ -1,3 +1,12 @@
+============================================================================
+Code size:
+
+dhry: (text in dhry_1.o dhry_2.o): 3988 (vs 1248/3000 for CMM/LMM)
+dhry -O3:                          4388
+xxtea (text in main.o xxtea.o):     708 (vs  374/ 912 for CMM/LMM)
+fftbench (text in fftbench.o):     1536 (vs  852/2052 for CMM/LMM)
+
+============================================================================
 P1 results:
 
 fibo(8):  167072 cycles size of fibo=100 bytes
@@ -90,7 +99,7 @@ dhry:	    1521/sec
 
 =================================================
 P2 JIT
-fibo(8):   36202 cycles
-xxtea:     99312 cycles 
-fftbench: 100504 us
-dhry:       1220/sec
+fibo(8):   36068 cycles
+xxtea:     98988 cycles 
+fftbench: 100489 us
+dhry:       1238/sec (1682/sec with -O3)

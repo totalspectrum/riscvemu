@@ -4,12 +4,16 @@
 # PROG= root name of the program
 # PROGOBJS= objects the program wants to use
 # LIBOBJS= objects to be included from the library
+# CDEFS= any C defines to include
+# OPT= optimization level (defaults to -Os)
+# ARCH= architecture to use (defaults to -march=rv32im)
 #
 # Change these two lines to suit your environment
 TOOLS=/opt/riscv/bin/riscv32-unknown-elf-
 SPIN2CPP=/home/ersmith/Parallax/spin2cpp/build/spin2cpp
 
-ARCH=-march=rv32im
+ARCH ?= -march=rv32im
+OPT ?= -Os
 
 AS=$(TOOLS)as
 ASFLAGS=$(ARCH)
@@ -17,7 +21,7 @@ LIB=../lib/
 LD=$(TOOLS)ld
 
 CC=$(TOOLS)gcc
-CFLAGS=-Os $(ARCH)
+CFLAGS=$(OPT) $(ARCH) $(CDEFS)
 
 START=$(LIB)start.o
 

@@ -166,7 +166,6 @@ nexti
    		mov	temp, opcode
 		shr	temp, #7
 		and	temp, #$1f wz
-		add	temp, #x0
    if_z		mov	temp, #dest	' writes to x0 get ignored
    		setd	write_and_nexti, temp
 		mov	temp, opcode

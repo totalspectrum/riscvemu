@@ -109,14 +109,7 @@ startup
 		
 set_pc
 #ifdef DEBUG
-		mov	info3, info2
-		mov	info2, info1
-		mov	info1, ptrb
 		call	#checkdebug
-		'' check for stack weirdness
-		mov	temp, x2
-		cmp	temp, ##$6800 wc,wz
-	if_c	call	#imp_illegal
 #endif
 		getbyte	tagaddr, ptrb, #0	' low 2 bits of ptrb must be 0
 		mov	tagidx, tagaddr
@@ -318,7 +311,7 @@ slt_reg
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1
 slt_fini
-		mov	opptr, sltfunc_pat
+		mov	opptr, #sltfunc_pat
 		call	#emit2
 		jmp	#emit_ret
 		
@@ -409,7 +402,9 @@ signext_instr
 signmask
 		long	0
 		
-AUGPTR_MASK	long	$000FFFFF
+LOC_MASK
+AUGPTR_MASK
+		long	$000FFFFF
 
 sysinstr
 illegalinstr
@@ -507,8 +502,6 @@ jalr
 imp_jalr
 		loc	ptrb, #\(0-0)
 		add	ptrb, 0-0
-LOC_MASK
-		long	$000fffff
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' conditional branch
 ''   beq rs1, rs2, immval
@@ -855,8 +848,8 @@ start_of_tables
 mathtab
 		add	0,regfunc    wz	' wz indicates we want add/sub
 		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
-		cmps	0,sltfunc    wc
-		cmp	0,sltfunc    wc
+		cmps	0,sltfunc    wc,wz
+		cmp	0,sltfunc    wc,wz
 		xor	0,regfunc
 		shr	0,regfunc    wc	' wc indicates we want shr/sar
 		or	0,regfunc

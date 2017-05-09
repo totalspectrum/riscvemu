@@ -13,8 +13,8 @@ CON
 OBJ
 #ifdef __P2__
   ser: "SimpleSerial"
-'  proc: "riscvemu_p2.spin"
-  proc: "riscvjit_p2.spin"
+  proc: "riscvemu_p2.spin"
+'  proc: "riscvjit_p2.spin"
 #else
   ser: "FullDuplexSerial"
   proc: "riscvemu.spin"

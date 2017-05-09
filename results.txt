@@ -1,9 +1,10 @@
 ============================================================================
-Code size:
+estimates of code size
 
-dhry: (text in dhry_1.o dhry_2.o): 3988 (vs 1248/3000 for CMM/LMM)
-dhry -O3:                          4388
-xxtea (text in main.o xxtea.o):     708 (vs  374/ 912 for CMM/LMM)
+dhry: (text in dhry_1.o dhry_2.o): 2560 (vs 1248/3000 for CMM/LMM)
+    (NOTE: 1428 bytes of data is put into text by riscv/zog compilers)
+dhry -O3:                          2960
+xxtea (text in main.o xxtea.o):     708 (vs  384/ 912 for CMM/LMM)
 fftbench (text in fftbench.o):     1536 (vs  852/2052 for CMM/LMM)
 
 ============================================================================
@@ -96,6 +97,12 @@ fibo(8):   74828 cycles
 xxtea:    207824 cycles 
 fftbench: 237913 us
 dhry:	    1521/sec
+
+other misc. optimizations
+fibo(8):   72844 cycles
+xxtea:    202656 cycles 
+fftbench: 232937 us
+dhry:	    1555/sec
 
 =================================================
 P2 JIT

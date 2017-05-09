@@ -205,7 +205,7 @@ nosar
 		mov	dest, rd
 		call	#emit_mov_rd_rs1
 		call	#emit_big_instr
-		jmp	#emit_ret
+		jmp	#finish_cache_line
 
 		'
 		' register<-> register operation
@@ -242,8 +242,8 @@ notemp
 		setd  	opdata, rd
 emit_opdata_and_ret
 		wrlut	opdata, cacheptr
-		add	cacheptr, #1
-		jmp	#emit_ret
+	_ret_	add	cacheptr, #1
+
 mov_temp_op
 		mov	temp, 0-0
 
@@ -271,9 +271,7 @@ muldiv
 	mov	mul_templ+2, temp
 	setd	mul_templ+3, rd
 	mov	opptr, #mul_templ
-emit4_and_ret
-	call	#emit4
-	jmp	#emit_ret
+	jmp	#emit4
 	
 mul_templ
 	mov	rs1, 0-0
@@ -312,8 +310,7 @@ slt_reg
 		add	cacheptr, #1
 slt_fini
 		mov	opptr, #sltfunc_pat
-		call	#emit2
-		jmp	#emit_ret
+		jmp	#emit2		' return from there to our caller
 		
 sltfunc_pat
 		mov	0-0, #0
@@ -344,8 +341,10 @@ recompile
 	getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
-		jmp	temp
-		'' from temp we will return back 
+		call	temp
+		'' now close off the cache line
+		'' and return to our caller
+		jmp    #finish_cache_line
 
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -389,12 +388,12 @@ ldst_common
 		mov	dest, rd
 		call	#emit_big_instr
 		cmp	signmask, #0 wz
-	if_z	jmp	#emit_ret
+	if_z	ret
 		setd	signext_instr, rd
 		sets	signext_instr, signmask
 		wrlut	signext_instr, cacheptr
-		add	cacheptr, #1
-		jmp	#emit_ret
+	_ret_	add	cacheptr, #1
+
 movptra
 		mov	ptra, 0-0
 signext_instr
@@ -443,8 +442,7 @@ lui
 		and	immval, LUI_MASK
 lui_aui_common
 		mov	dest, rd
-		call	#emit_mvi
-		jmp	#emit_ret
+		jmp	#emit_mvi	'' return from there
 		
 LUI_MASK	long	$fffff000
 
@@ -486,8 +484,7 @@ jal
 emit_save_retaddr
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
-		call	#emit_mvi
-		jmp	#emit_ret
+		jmp	#emit_mvi	' return from there
 
 jalr
 		' set up offset in ptrb
@@ -554,8 +551,7 @@ condbranch
 		add	immval, ptrb
 		sub	immval, #4
 		mov	dest, #ptrb
-		call	#emit_mvi
-		jmp	#emit_ret
+		jmp	#emit_mvi	' return from there
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
@@ -630,7 +626,7 @@ mov_pat		mov	0,0
 ' emit a return instruction by masking off the upper bits of the previously
 ' emitted instruction
 '
-emit_ret
+finish_cache_line
 		sub	cacheptr, #1
 		rdlut	temp, cacheptr
 		andn	temp, CONDMASK
@@ -721,8 +717,7 @@ imp_div
 		abs	rs2,rs2
 		call	#imp_divu
 		testb	temp, #31 wc	' check sign
-	if_c	neg	rd
-		ret
+	_ret_	negc	rd
 
 
 '=========================================================================
@@ -790,14 +785,14 @@ not_standard
 		'' implement uart
   		sets	wrcmd_instr, rs1
 		mov	opptr, #wrcmd_instr
-		jmp	#emit4_and_ret
+		jmp	#emit4		' return from there to caller
 not_uart
 		cmp	immval, #$1C1 wz
 	if_nz	jmp	#not_wait
 		setd	waitcnt_instr, rs1
 		mov	opptr, #waitcnt_instr
-		call	#emit2
-		jmp	#emit_ret
+		jmp	#emit2		' return from there
+
 not_wait
 		jmp	#illegalinstr
 
@@ -883,9 +878,13 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 end_of_tables
 
+	fit	$1e8
+
 ''
 '' some lesser used routines we wanted to put in HUB
 '' but as presently organized, that's difficult :(
 ''
 
-	fit	$1f0
+		.orgh
+		'' initialize serial routines
+ser_init

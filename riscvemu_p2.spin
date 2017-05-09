@@ -46,41 +46,58 @@ PUB stop
 DAT
 		org 0
 enter
-init
-		mov	temp, ptra
-		rdlong	cmd_addr, temp
-		add	temp, #4
-		rdlong	membase, temp
-		add	temp, #4
-		rdlong	memsize, temp
-		add	temp, #4
-		rdlong	shadowpc, temp
-		add	temp, #4
-		mov	x0+2,memsize	' set up stack pointer
-		add	x0+2,membase
-		rdlong	dbgreg_addr, temp
+x0		mov	temp, ptra
+x1		rdlong	cmd_addr, temp
+x2		add	temp, #4
+x3		rdlong	membase, temp
+x4		add	temp, #4
+x5		rdlong	memsize, temp
+x6		add	temp, #4
+x7		rdlong	shadowpc, temp
+x8		add	temp, #4
+x9		mov	x0+2,memsize	' set up stack pointer
+x10		add	x0+2,membase
+x11		rdlong	dbgreg_addr, temp
 
 		'' set up opcode table in LUT at offset 0
 		'' initialize to all 0
-		mov    dest, #0
-		mov    temp, #$80
-.oinitlp
-		wrlut	jmpillegalinstr, dest
-		add	dest, #1
-		djnz	temp, #.oinitlp
+x12		mov    dest, #0
+x13		mov    temp, #$80
+oinitlp
+x14		wrlut	jmpillegalinstr, dest
+x15		add	dest, #1
+x16		djnz	temp, #oinitlp
 
 		'' now set up some specific opcodes
-		wrlut	jmploadop, #3
-		wrlut	jmpimmop,  #3+($04<<2)
-		wrlut	jmpauipc,  #3+($05<<2)
-		wrlut	jmpstoreop,#3+(8<<2)
-		wrlut	jmpregop,  #3+($0C<<2)
-		wrlut	jmplui,    #3+($0D<<2)
-		wrlut	jmpcondbranch, #3+($18<<2)
-		wrlut	jmpjalr,   #3+($19<<2)
-		wrlut	jmpjal,    #3+($1b<<2)
-		wrlut	jmpsys,    #3+($1c<<2)
-		
+x17		wrlut	jmploadop, #3
+x18		wrlut	jmpimmop,  #3+($04<<2)
+x19		wrlut	jmpauipc,  #3+($05<<2)
+x20		wrlut	jmpstoreop,#3+(8<<2)
+x21		wrlut	jmpregop,  #3+($0C<<2)
+x22		wrlut	jmplui,    #3+($0D<<2)
+x23		wrlut	jmpcondbranch, #3+($18<<2)
+x24		wrlut	jmpjalr,   #3+($19<<2)
+x25		wrlut	jmpjal,    #3+($1b<<2)
+x26		wrlut	jmpsys,    #3+($1c<<2)
+x27		mov	x0, #0
+x28		nop
+x29		nop
+x30		nop
+x31		jmp	#emustart
+
+		'' registers
+		'' pc must follow x0-x31
+		'' next one after is also displayed in debug
+shadowpc	long	0
+opcode		long	0
+info1		long	0	' debug info
+info2		long	0	' debug info
+info3		long	0	' debug info
+info4		long	0	' debug info
+rununtil	long	0
+stepcount	long	1	' start in single step mode
+
+emustart
 		'' finally set up the shadow pc
 		rdfast	x0, shadowpc	        ' should be rdfast #0, pc, but fastspin is buggy
 		jmp	#nexti
@@ -714,19 +731,6 @@ memsize		long 0	' size of emulated RAM
 hubaddr		long 0
 cogaddr		long 0
 hubcnt		long 0
-
-		'' registers
-		'' pc must follow x0-x31
-		'' next one after is also displayed in debug
-x0		long	0[32]
-shadowpc	long	0
-opcode		long	0
-info1		long	0	' debug info
-info2		long	0	' debug info
-info3		long	0	' debug info
-info4		long	0	' debug info
-rununtil	long	0
-stepcount	long	1	' start in single step mode
 
 rd		long	0
 rs1		long	0

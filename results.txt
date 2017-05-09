@@ -109,4 +109,4 @@ P2 JIT
 fibo(8):   36068 cycles
 xxtea:     98988 cycles 
 fftbench: 100489 us
-dhry:       1238/sec (1682/sec with -O3)
+dhry:       1190/sec (1682/sec with -O3)

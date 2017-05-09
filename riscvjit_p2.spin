@@ -292,7 +292,7 @@ sltfunc
 		cmp	rd, #0	wz	' if rd == 0, emit nop
 	if_z	jmp	#\emit_nop
 	
-		and	opdata, #$1ff	' zero out source
+		andn	opdata, #$1ff	' zero out source
 		setd	sltfunc_pat, rd
 		setd	sltfunc_pat+1, rd
 		'' check for immediate

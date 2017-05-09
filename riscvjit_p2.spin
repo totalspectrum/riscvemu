@@ -111,8 +111,8 @@ set_pc
 #ifdef DEBUG
 		call	#checkdebug
 #endif
-		getbyte	tagaddr, ptrb, #0	' low 2 bits of ptrb must be 0
-		mov	tagidx, tagaddr
+		getbyte	cachebaseaddr, ptrb, #0	' low 2 bits of ptrb must be 0
+		mov	tagidx, cachebaseaddr
 		shr	tagidx, #2
 		add	tagidx, #$100		' start of tag data
 		rdlut	temp, tagidx
@@ -120,8 +120,8 @@ set_pc
 	if_z	add	ptrb, #4		' skip to next instruction
 	if_nz	call	#recompile
 		push	#set_pc
-		add	tagaddr, CACHE_START
-		jmp	tagaddr
+		add	cachebaseaddr, CACHE_START
+		jmp	cachebaseaddr
 
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -323,8 +323,8 @@ recompile
 		'' update the tag index
 		wrlut	ptrb, tagidx
 
-		'' now compile into tagaddr in the LUT
-		mov	cacheptr, tagaddr
+		'' now compile into cachebaseaddr in the LUT
+		mov	cacheptr, cachebaseaddr
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wc,wz
   if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
@@ -608,14 +608,16 @@ emit_nop
 		wrlut	emit_nop_pat,cacheptr
 	_ret_	add	cacheptr,#1
 emit_nop_pat
-	_ret_	or	0,0	' a real nop won't work because we can't prefix with _ret_
+		or	0,0	' a real nop won't work because we can't prefix with _ret_
 
 '
 ' emit a mov of rs1 to rd
 '
 emit_mov_rd_rs1
+#ifdef NEVER
 		cmp	rd,rs1 wz
 	if_z	ret			' skip the mov if both the same
+#endif
 		sets	mov_pat,rs1
 		setd	mov_pat,rd
 		wrlut	mov_pat,cacheptr
@@ -623,10 +625,12 @@ emit_mov_rd_rs1
 mov_pat		mov	0,0
 
 '
-' emit a return instruction by masking off the upper bits of the previously
-' emitted instruction
+' emit no-ops to fill out the cache line to a multiple of 4
 '
 finish_cache_line
+		test	cacheptr, #3 wz
+	if_nz	call	#emit_nop
+	if_nz	jmp	#finish_cache_line
 		sub	cacheptr, #1
 		rdlut	temp, cacheptr
 		andn	temp, CONDMASK
@@ -830,7 +834,8 @@ opptr		long	0
 cacheptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
-tagaddr		long	0
+cachebaseaddr	long	0
+cachelinenum	long	0
 tagidx		long	0
 
 	''
@@ -878,7 +883,7 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 end_of_tables
 
-	fit	$1e8
+		fit	$1e8
 
 ''
 '' some lesser used routines we wanted to put in HUB

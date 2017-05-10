@@ -110,3 +110,10 @@ fibo(8):   36068 cycles
 xxtea:     98988 cycles 
 fftbench: 100489 us
 dhry:       1190/sec (1682/sec with -O3)
+
+P2 JIT with 4 instructions/cache line
+fibo(8):   24225 cycles
+xxtea:     59755 cycles 
+fftbench:  60964 us
+dhry:       1119/sec (1561/sec with -O3)
+

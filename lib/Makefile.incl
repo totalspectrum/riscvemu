@@ -29,7 +29,7 @@ LINKFILE=$(LIB)flat.ld
 
 STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
 
-OBJS=$(START) $(PROGOBJS) $(LIBOBJS)
+OBJS?=$(START) $(PROGOBJS) $(LIBOBJS)
 
 all: p1.binary p2.binary
 

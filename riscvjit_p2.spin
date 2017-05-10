@@ -110,30 +110,17 @@ startup
 set_pc
 		getbyte	cachepc, ptrb, #0	' low 2 bits of ptrb must be 0
 		getnib	tagidx, ptrb, #1
+#ifdef DEBUG
+		mov	info3, ptrb
+		mov	info4, cachepc
+		call	#checkdebug
+#endif
 		add	tagidx, #$100		' start of tag data
 		andn	ptrb, #$f      	     	' back ptrb up to start of line
 		rdlut	temp, tagidx
-#ifdef DEBUG
-		mov	info2, tagidx
-		mov	info3, temp
-''		mov	info4, ptrb
-		call	#checkdebug
-#endif
 		cmp	ptrb, temp wz
 	if_z	add	ptrb, #16	' skip to start of next line
 	if_nz	call	#recompile
-#ifdef DEBUG
-		mov	info1, cacheptr
-		sub	cacheptr, #16
-		rdlut	x0+24, cacheptr
-		add	cacheptr, #1
-		rdlut	x0+25, cacheptr
-		add	cacheptr, #1
-		rdlut	x0+26, cacheptr
-		add	cacheptr, #1
-		rdlut	x0+27, cacheptr
-		call	#checkdebug
-#endif
 		push	#set_pc
 		add	cachepc, CACHE_START
 		jmp	cachepc
@@ -479,7 +466,7 @@ LUI_MASK	long	$fffff000
 {{
    template for jal rd, offset
 imp_jal
-		mov	ptrb, ##newpc   (compile time pc+offset)
+		loc	ptrb, #newpc   (compile time pc+offset)
     _ret_	mov	rd, ##retaddr  (compile time pc+4)
 
    template for jalr rd, rs1, offset
@@ -508,13 +495,14 @@ jal
 		andn	immval, #1  	' clear low bit
 		bitc	immval, #11	' set bit 11
 		add	immval, ptrb	' calculate branch target
-		sub	immval, #4	' adjust for next target
-		mov	dest, #ptrb
-		call	#emit_mvi
+		call	#emit_pc_immval_minus_4
 emit_save_retaddr
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
-		call	#emit_mvi	' return from there
+		call	#emit_mvi	' move into rd
+		
+		wrlut	ret_instr, cacheptr
+	_ret_	add	cacheptr, #1
 
 jalr
 		' set up offset in ptrb
@@ -548,8 +536,10 @@ imp_jalr
 cmps_instr	cmps	rs1, rs2 wc,wz
 cmp_instr	cmp	rs1, rs2 wc,wz
 cmp_flag	long	0
-ret_instr	ret
-loc_instr	loc	ptrb, #0
+ret_instr
+		ret
+
+loc_instr	loc	ptrb, #\(0-0)
 
 emit_pc_immval_minus_4
 		sub	immval, #4
@@ -599,10 +589,10 @@ condbranch
 		'' now write a conditional loc and ret
 		shl	cmp_flag,#28		' get in high nibble
 		call	#reset_compare_flag	' change conditional flag of last instruction
-		
-		andn	ret_instr, CONDMASK
-		or	ret_instr, cmp_flag
-		wrlut	ret_instr, cacheptr
+		mov	opdata, ret_instr
+		andn	opdata, CONDMASK
+		or	opdata, cmp_flag
+		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
 
 		

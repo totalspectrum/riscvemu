@@ -44,7 +44,7 @@
     During runtime, the actual pc is kept in the ptrb register.
 }}
 
-#define DEBUG
+'#define DEBUG
 
 CON
   CACHE_LINES = 64	' 1 line per instruction
@@ -430,7 +430,7 @@ illegalinstr
 imp_illegal
 		call	#\dumpregs
 		mov	newcmd, #2
-		jmp	#\sendcmd_and_wait
+		call	#\sendcmd_and_wait
 
     		'' deconstruct instr
 decodei
@@ -694,6 +694,9 @@ readregs
 	_ret_	mov	x0, #0		' always 0 in x0!
 
 newcmd		long 0
+sendchar
+		shl	newcmd, #4
+		or	newcmd, #$F
 sendcmd_and_wait
 		call	#waitcmdclear
 		wrlong	newcmd, cmd_addr
@@ -819,7 +822,7 @@ not_standard
 		'' implement uart
   		sets	wrcmd_instr, rs1
 		mov	opptr, #wrcmd_instr
-		jmp	#emit4		' return from there to caller
+		jmp	#emit2		' return from there to caller
 not_uart
 		cmp	immval, #$1C1 wz
 	if_nz	jmp	#not_wait
@@ -838,9 +841,7 @@ waitcnt_instr
 		waitct1
 wrcmd_instr
 		mov	newcmd, 0-0
-		shl	newcmd, #4
-		or	newcmd, #$F
-		jmp	#\sendcmd_and_wait
+		call	#\sendchar
 
 		
 '=========================================================================

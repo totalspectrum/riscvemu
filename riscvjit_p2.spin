@@ -44,7 +44,7 @@
     During runtime, the actual pc is kept in the ptrb register.
 }}
 
-'#define DEBUG
+#define DEBUG
 
 CON
   CACHE_LINES = 64	' 1 line per instruction
@@ -67,21 +67,21 @@ PUB stop
 DAT
 		org 0
 enter
-x0		rdlong	cmd_addr, ptra++
-x1		rdlong	membase, ptra++
-x2		rdlong	memsize, ptra++
-x3		rdlong	ptrb, ptra++
-		
-x4		mov	x0+2, membase
-x5		add	x0+2,memsize	' set up stack pointer
+x0		nop
+x1		rdlong	cmd_addr, ptra++
+x2		rdlong	x2, ptra++
+x3		rdlong	temp, ptra++
+
+x4		rdlong	ptrb, ptra++		
+x5		add	x2, temp	' set up stack pointer
 x6		rdlong	dbgreg_addr, ptra++
-x7		mov	x0, #$1ff	' will count down
+x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
 x8		neg	x3,#1
 x9		nop
-x10		wrlut	x3,x0
-x11		djnz	x0,#x10
+x10		wrlut	x3,x1
+x11		djnz	x1,#x10
 
 x12		nop
 x13		nop
@@ -108,22 +108,84 @@ startup
 		djnz	temp, #.lp
 		
 set_pc
+		getbyte	cachepc, ptrb, #0	' low 2 bits of ptrb must be 0
+		getnib	tagidx, ptrb, #1
+		add	tagidx, #$100		' start of tag data
+		andn	ptrb, #$f      	     	' back ptrb up to start of line
+		rdlut	temp, tagidx
 #ifdef DEBUG
+		mov	info2, tagidx
+		mov	info3, temp
+''		mov	info4, ptrb
 		call	#checkdebug
 #endif
-		getbyte	cachebaseaddr, ptrb, #0	' low 2 bits of ptrb must be 0
-		mov	tagidx, cachebaseaddr
-		shr	tagidx, #2
-		add	tagidx, #$100		' start of tag data
-		rdlut	temp, tagidx
 		cmp	ptrb, temp wz
-	if_z	add	ptrb, #4		' skip to next instruction
+	if_z	add	ptrb, #16	' skip to start of next line
 	if_nz	call	#recompile
+#ifdef DEBUG
+		mov	info1, cacheptr
+		sub	cacheptr, #16
+		rdlut	x0+24, cacheptr
+		add	cacheptr, #1
+		rdlut	x0+25, cacheptr
+		add	cacheptr, #1
+		rdlut	x0+26, cacheptr
+		add	cacheptr, #1
+		rdlut	x0+27, cacheptr
+		call	#checkdebug
+#endif
 		push	#set_pc
-		add	cachebaseaddr, CACHE_START
-		jmp	cachebaseaddr
+		add	cachepc, CACHE_START
+		jmp	cachepc
 
 
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' routine to compile the cache line starting at ptrb
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+recompile
+		'' update the tag index
+		wrlut	ptrb, tagidx
+
+		'' now compile into cachebaseaddr in the LUT
+		'' the cache base address is formed from ptrb, which
+		'' is now pointing at the start of the HUB address
+		getbyte	cacheptr, ptrb, #0
+		mov	cachecnt, #4
+cachelp
+		rdlong	opcode, ptrb++
+		test	opcode, #3 wc,wz
+  if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
+  		call	#decodei
+		mov	temp, opcode
+		shr	temp, #2
+		and	temp, #$1f
+		alts	temp, #optable
+		mov	opdata, 0-0		' fetch long from table
+		test	opdata, CONDMASK wz	' are upper bits 0?
+	if_nz	jmp	#getinstr
+		alts	funct3, opdata		' do table indirection
+		mov	opdata, 0-0
+getinstr
+		mov	temp, opdata
+		and	temp, #$1ff
+		call	temp			' compile the instruction
+pad_instructions
+		'' pad the instruction translation to a multiple of 4
+		test	cacheptr, #3 wz
+	if_nz	call	#emit_nop
+	if_nz	jmp	#pad_instructions
+
+		djnz	cachecnt, #cachelp
+		'' finish the cache line
+
+		'' now set the last instructions EXEC flag to 0 (_ret_)
+finish_cache_line
+		mov	cmp_flag, #0
+		jmp	#reset_compare_flag
+		
+do_illegalinstr
+		call	#illegalinstr
+		jmp	#pad_instructions
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
 ' if the upper 4 bits of the entry is 0, the entry is
@@ -204,8 +266,7 @@ nosar
 		'
 		mov	dest, rd
 		call	#emit_mov_rd_rs1
-		call	#emit_big_instr
-		jmp	#finish_cache_line
+		jmp	#emit_big_instr
 
 		'
 		' register<-> register operation
@@ -315,37 +376,6 @@ slt_fini
 sltfunc_pat
 		mov	0-0, #0
 		muxc	0-0, #1
-
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-' routine to compile the opcode at ptrb
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-recompile
-		'' update the tag index
-		wrlut	ptrb, tagidx
-
-		'' now compile into cachebaseaddr in the LUT
-		mov	cacheptr, cachebaseaddr
-		rdlong	opcode, ptrb++
-		test	opcode, #3 wc,wz
-  if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
-  		call	#decodei
-		mov	temp, opcode
-		shr	temp, #2
-		and	temp, #$1f
-		alts	temp, #optable
-		mov	opdata, 0-0		' fetch long from table
-		test	opdata, CONDMASK wz	' are upper bits 0?
-	if_nz	jmp	#getinstr
-		alts	funct3, opdata		' do table indirection
-		mov	opdata, 0-0
-	getinstr
-		mov	temp, opdata
-		and	temp, #$1ff
-		call	temp
-		'' now close off the cache line
-		'' and return to our caller
-		jmp    #finish_cache_line
-
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
@@ -484,7 +514,7 @@ jal
 emit_save_retaddr
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
-		jmp	#emit_mvi	' return from there
+		call	#emit_mvi	' return from there
 
 jalr
 		' set up offset in ptrb
@@ -512,33 +542,48 @@ imp_jalr
 ''       "c" inverts the sense of a
 '' the output will look like:
 ''        cmp[s] rs1, rs2 wc,wz
-''  if_nz ret
-''        mov ptrb, ##newpc
+''  if_z  loc ptrb, ##newpc
+''  if_z  ret
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 cmps_instr	cmps	rs1, rs2 wc,wz
 cmp_instr	cmp	rs1, rs2 wc,wz
 cmp_flag	long	0
 ret_instr	ret
+loc_instr	loc	ptrb, #0
+
+emit_pc_immval_minus_4
+		sub	immval, #4
+emit_pc_immval
+		andn	loc_instr, LOC_MASK
+		and	immval, LOC_MASK
+		or	loc_instr, immval
+		wrlut	loc_instr, cacheptr
+	_ret_	add	cacheptr, #1
+
+'' reset the compare flag on the last instruction
+'' to whatever is in cmp_flag
+reset_compare_flag
+		sub	cacheptr, #1
+		rdlut	temp, cacheptr
+		andn	temp, CONDMASK
+		or	temp, cmp_flag
+		wrlut	temp, cacheptr
+	_ret_	add	cacheptr, #1
 
 condbranch
 		test	funct3, #%100 wz
-	if_z	mov	cmp_flag, #%0101	' IF_NZ
-	if_nz	mov	cmp_flag, #%0011	' IF_NC
+	if_z	mov	cmp_flag, #%1010	' IF_Z
+	if_nz	mov	cmp_flag, #%1100	' IF_C
 		test	funct3, #%001 wz
 	if_nz	xor	cmp_flag, #$f		' flip sense
 		test	funct3, #%010 wz
+		'' write the compare instruction
 	if_z	mov	opdata,cmps_instr
 	if_nz	mov	opdata, cmp_instr
 		setd	opdata, rs1
 		sets	opdata, rs2
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1
-		mov	opdata, ret_instr
-		andn	opdata, CONDMASK
-		shl	cmp_flag,#28		' get in high nibble
-		or	opdata, cmp_flag
-		wrlut	opdata, cacheptr
-		add	cacheptr,#1
 
 		'' now we need to calculate the new pc
 		'' this means re-arranging some bits
@@ -549,9 +594,17 @@ condbranch
 		bitc	immval, #11
 		andn	immval, #1
 		add	immval, ptrb
-		sub	immval, #4
-		mov	dest, #ptrb
-		jmp	#emit_mvi	' return from there
+		call	#emit_pc_immval_minus_4
+		
+		'' now write a conditional loc and ret
+		shl	cmp_flag,#28		' get in high nibble
+		call	#reset_compare_flag	' change conditional flag of last instruction
+		
+		andn	ret_instr, CONDMASK
+		or	ret_instr, cmp_flag
+		wrlut	ret_instr, cacheptr
+	_ret_	add	cacheptr, #1
+
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
@@ -624,19 +677,6 @@ emit_mov_rd_rs1
 	_ret_	add	cacheptr,#1
 mov_pat		mov	0,0
 
-'
-' emit no-ops to fill out the cache line to a multiple of 4
-'
-finish_cache_line
-		test	cacheptr, #3 wz
-	if_nz	call	#emit_nop
-	if_nz	jmp	#finish_cache_line
-		sub	cacheptr, #1
-		rdlut	temp, cacheptr
-		andn	temp, CONDMASK
-		wrlut	temp, cacheptr
-	_ret_	add	cacheptr, #1
-		
 CONDMASK	long	$f0000000
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
@@ -735,11 +775,10 @@ imp_div
 ''    op  <reg>, rs1
 ''
 csrrw
-		mov	funct3, immval
-		shr	funct3, #8
-		and	funct3, #$f	' select upper nybble
+		getnib	funct3, immval, #2
 		and	immval, #$1FF
 
+#ifndef DEBUG
 		'' check for COG I/O e.g. 7f4
 		cmp	funct3, #7 wz
 	if_nz	jmp	#not_cog
@@ -756,6 +795,7 @@ skip_rd
 		setd	opdata, immval
 		sets	opdata, rs1
 		jmp	#emit_opdata_and_ret
+#endif
 not_cog
 		'' check for standard read-only regs
 		cmp	funct3, #$C wz
@@ -819,8 +859,6 @@ temp		long 0
 dest		long 0
 dbgreg_addr	long 0	' address where registers go in HUB during debug
 cmd_addr	long 0	' address of HUB command word
-membase		long 0	' base of emulated RAM
-memsize		long 0	' size of emulated RAM
 
 rd		long	0
 rs1		long	0
@@ -834,9 +872,9 @@ opptr		long	0
 cacheptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
-cachebaseaddr	long	0
-cachelinenum	long	0
+cachepc		long	0
 tagidx		long	0
+cachecnt	long	0
 
 	''
 	'' opcode tables
@@ -883,7 +921,7 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 end_of_tables
 
-		fit	$1e8
+		fit	$1f0
 
 ''
 '' some lesser used routines we wanted to put in HUB

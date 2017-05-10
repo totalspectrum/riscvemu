@@ -73,7 +73,6 @@ PUB demo | cmd, arg, c, x
       ser.str(string("*** step ***", 13, 10))
       dumpregs
       c := waitforkey
-      regs[36] := c
       if (c == "b")
         nl
 	ser.str(string("Number of steps: "))

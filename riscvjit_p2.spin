@@ -6,75 +6,50 @@
    An emulator for the RISC-V processor architecture, designed to run
    in a single Propeller COG.
 
-   The interface is pretty simple: the params array passed to the start
-   method should contain:
-   
-   params[0] = address of command register
-   params[1] = base of emulated memory (must be 4K, and programs must be linked
-   	       to run there)
-   params[2] = size of emulated memory (stack will start at base + size and grow down)
-   params[3] = initial pc (usually 0)
-   params[4] = address for register dump (36 longs; x0-x31, pc, opcode, dbg1, dbg3)
+   This version is stand alone, i.e. does not communicate with a debug
+   COG.
 
-   The command register is used for communication from the RISC-V back to the host.
-   The lowest 4 bits contain a command, as follows:
-   $1 = single step (registers have been dumped)
-   $2 = illegal instruction encountered (registers have been dumped)
-   $F = request to write character in bits 12-8 of command register
+   Reads and writes go directly to the host HUB memory. To access COG memory
+   or special registers use the CSR instructions. CSRs we know about:
+      7Fx - COG registers 1F0-1FF
+      BC0 - UART register
+      BC1 - wait register
+      C00 - cycle counter
 
-   The host should write 0 to the command register as an "ACK" to restart the RISC-V.
-  ---------------------------------------------------------------------
-  Reads and writes go directly to the host HUB memory. To access COG memory
-  or special registers use the CSR instructions. CSRs we know about:
-     7Fx - COG registers 1F0-1FF
-     BC0 - UART register
-     BC1 - wait register
-     C00 - cycle counter
-
-  Theory of operation:
-  we pre-compile instructions and run them from a cache.
-  Each RISC-V instruction maps to up to 4 PASM instructions.
-  They run inline until the end of the cache, where we have to
-  have a return (probably through a _ret_ prefix). On return
-  the emupc register contains the next pc we should execute;
-  this is initialized to the next pc after the cache, so if
-  we fall through everything is good.
-
-  NOTES:
-    During runtime, the actual pc is kept in the ptrb register.
+   Theory of operation:
+     We pre-compile instructions and run them from a cache.
+     Each RISC-V instruction maps to up to 4 PASM instructions.
+     They run inline until the end of the cache, where we have to
+     have a return (probably through a _ret_ prefix). On return
+     the ptrb register contains the next pc we should execute;
+     this is initialized to the next pc after the cache, so if
+     we fall through everything is good.
 }}
 
-'#define DEBUG
 
 CON
-  CACHE_LINES = 64	' 1 line per instruction
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
-  
-VAR
-  long cog
+  BASE_OF_MEM = $2000  ' 8K
+  TOP_OF_MEM = $8000   ' 32K
+  RX_PIN = 63
+  TX_PIN = 62
   
 PUB start(params)
-  cog := cognew(@enter, params) + 1
-  return cog
-
-PUB stop
-  if (cog > 0)
-    cogstop(cog-1)
-
+  coginit(0, @enter, 0)
 
 DAT
 		org 0
 enter
 x0		nop
-x1		rdlong	cmd_addr, ptra++
-x2		rdlong	x2, ptra++
-x3		rdlong	temp, ptra++
+x1		jmp	#x3
+x2		long	TOP_OF_MEM
+x3		nop
 
-x4		rdlong	ptrb, ptra++		
-x5		add	x2, temp	' set up stack pointer
-x6		rdlong	dbgreg_addr, ptra++
+x4		loc	ptrb, #BASE_OF_MEM
+x5		nop
+x6		nop
 x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
@@ -83,8 +58,8 @@ x9		nop
 x10		wrlut	x3,x1
 x11		djnz	x1,#x10
 
-x12		nop
-x13		nop
+x12		loc	ptra, #boot_msg
+x13		call	#ser_str
 x14		nop
 x15		jmp	#startup
 
@@ -131,7 +106,9 @@ set_pc
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 recompile
 		'' update the tag index
-		wrlut	ptrb, tagidx
+		''wrlut	ptrb, tagidx	' this should work, but p2asm complains
+		mov	cacheptr, ptrb
+		wrlut	cacheptr, tagidx
 
 		'' now compile into cachebaseaddr in the LUT
 		'' the cache base address is formed from ptrb, which
@@ -428,9 +405,9 @@ illegalinstr
 		jmp	#emit3
 
 imp_illegal
-		call	#\dumpregs
-		mov	newcmd, #2
-		call	#\sendcmd_and_wait
+		mov	uartchar, #$69
+		call	#\ser_tx
+		jmp	#imp_illegal
 
     		'' deconstruct instr
 decodei
@@ -668,6 +645,8 @@ emit_mov_rd_rs1
 mov_pat		mov	0,0
 
 CONDMASK	long	$f0000000
+
+#ifdef DEBUG
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -711,7 +690,8 @@ waitcmdclear
 	if_nz	jmp	#waitcmdclear	' far end is still processing last command
 waitcmdclear_ret
 		ret
-		
+#endif
+
 '=========================================================================
 ' MATH ROUTINES
 '=========================================================================
@@ -809,7 +789,7 @@ not_cog
 		'' here's where we do our non-standard registers
 		'' BC0 == UART
 not_standard
-		cmp	#funct3, #$B wz	' is it one of ours?
+		cmp	funct3, #$B wz	' is it one of ours?
 	if_nz	jmp	#illegalinstr
 	
 		cmp	immval, #$1C0 wz
@@ -840,8 +820,8 @@ waitcnt_instr
 		addct1 0-0, #0
 		waitct1
 wrcmd_instr
-		mov	newcmd, 0-0
-		call	#\sendchar
+		mov	uartchar, 0-0
+		call	#\ser_tx
 
 		
 '=========================================================================
@@ -866,6 +846,10 @@ CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
 cachepc		long	0
 tagidx		long	0
 cachecnt	long	0
+
+uartchar	long	0
+uartcnt		long	0
+waitcycles	long	0
 
 	''
 	'' opcode tables
@@ -919,6 +903,35 @@ end_of_tables
 '' but as presently organized, that's difficult :(
 ''
 
-		.orgh
-		'' initialize serial routines
-ser_init
+		orgh $800
+
+		'' print single character in uartchar
+ser_tx
+		dirh	#TX_PIN
+		outh	#TX_PIN
+		or	uartchar, #256
+		shl	uartchar, #1
+		getct	waitcycles
+		mov	uartcnt, #10
+sertxlp
+		add	waitcycles, ##694	'' 115_200 baud
+		mov	temp, waitcycles
+		addct1	temp, #0
+		waitct1
+		test	uartchar, #1 wc
+		outc	#TX_PIN
+		shr	uartchar, #1
+		djnz	uartcnt, #sertxlp
+		ret
+
+		'' print string pointed to by ptra
+ser_str
+		rdbyte	uartchar, ptra++ wz
+	if_z	jmp	#done_str
+		call	#ser_tx
+		jmp	#ser_str
+done_str
+		ret
+
+boot_msg
+		byte	"RiscV P2 JIT", 10, 0

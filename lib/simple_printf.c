@@ -12,9 +12,15 @@
 #include <stdarg.h>
 
 #undef putchar
-#define putchar(c) putbyte(c)
+#define putchar putcharx
 
 extern void putbyte(int c);
+
+static void putcharx(int c)
+{
+    if (c == '\n') putbyte('\r');
+    putbyte(c);
+}
 
 /*
  * very simple printf -- just understands a few format features

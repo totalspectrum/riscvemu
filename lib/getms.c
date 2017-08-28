@@ -1,5 +1,7 @@
 extern unsigned int getcnt();
 
+extern unsigned int getcyclespersec();
+
 unsigned int getms() {
-    return getcnt() / 80000;
+    return getcnt() / (getcyclespersec()/1000);
 }

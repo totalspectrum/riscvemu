@@ -5,7 +5,10 @@
 
 //#define iprintf __simple_printf
 
-#define CLOCK_FREQUENCY  (80000000)
+extern unsigned int getcyclespersec();
+
+//#define CLOCK_FREQUENCY  (80000000)
+#define CLOCK_FREQUENCY (getcyclespersec())
 
 unsigned int fibo (unsigned int n)
 {

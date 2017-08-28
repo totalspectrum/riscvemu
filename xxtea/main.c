@@ -17,6 +17,8 @@ int main(int argc, char* argv[])
 {
     clock_t start, end;
 
+    iprintf("xxtea test\n");
+    
     start = getcnt();
     btea (testVector, -blockSize, (uint32_t*) key);
     end = getcnt();

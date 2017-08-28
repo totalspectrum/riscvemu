@@ -36,6 +36,8 @@ CON
   RX_PIN = 63
   TX_PIN = 62
   
+  CYCLES_PER_SEC = 60_000_000
+  
 PUB start(params)
   coginit(0, @enter, 0)
 
@@ -85,11 +87,11 @@ startup
 set_pc
 		getbyte	cachepc, ptrb, #0	' low 2 bits of ptrb must be 0
 		getnib	tagidx, ptrb, #1
-#ifdef DEBUG
+{{
 		mov	info3, ptrb
 		mov	info4, cachepc
 		call	#checkdebug
-#endif
+}}
 		add	tagidx, #$100		' start of tag data
 		andn	ptrb, #$f      	     	' back ptrb up to start of line
 		rdlut	temp, tagidx
@@ -634,10 +636,6 @@ emit_nop_pat
 ' emit a mov of rs1 to rd
 '
 emit_mov_rd_rs1
-#ifdef NEVER
-		cmp	rd,rs1 wz
-	if_z	ret			' skip the mov if both the same
-#endif
 		sets	mov_pat,rs1
 		setd	mov_pat,rd
 		wrlut	mov_pat,cacheptr
@@ -646,7 +644,7 @@ mov_pat		mov	0,0
 
 CONDMASK	long	$f0000000
 
-#ifdef DEBUG
+{{#ifdef DEBUG
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' debug routines
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -691,6 +689,7 @@ waitcmdclear
 waitcmdclear_ret
 		ret
 #endif
+}}
 
 '=========================================================================
 ' MATH ROUTINES
@@ -751,7 +750,6 @@ csrrw
 		getnib	funct3, immval, #2
 		and	immval, #$1FF
 
-#ifndef DEBUG
 		'' check for COG I/O e.g. 7f4
 		cmp	funct3, #7 wz
 	if_nz	jmp	#not_cog
@@ -768,7 +766,6 @@ skip_rd
 		setd	opdata, immval
 		sets	opdata, rs1
 		jmp	#emit_opdata_and_ret
-#endif
 not_cog
 		'' check for standard read-only regs
 		cmp	funct3, #$C wz
@@ -914,7 +911,7 @@ ser_tx
 		getct	waitcycles
 		mov	uartcnt, #10
 sertxlp
-		add	waitcycles, ##694	'' 115_200 baud
+		add	waitcycles, ##(CYCLES_PER_SEC/115_200)	'' 115_200 baud
 		mov	temp, waitcycles
 		addct1	temp, #0
 		waitct1

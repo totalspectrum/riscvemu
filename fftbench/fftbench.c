@@ -74,7 +74,8 @@ static void printSpectrum();
 // Return a timestamp in microsecond resolution.
 unsigned long time_us() {
     extern unsigned int getcnt();
-    return getcnt() / 80;
+    extern unsigned int getcyclespersec();
+    return getcnt() / (getcyclespersec()/1000000);
 }
 
 void print_omp_version() {

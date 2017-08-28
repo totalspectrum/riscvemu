@@ -5,7 +5,11 @@
 }} 
 
 CON
+#ifdef __P2__
+  _clkfreq = 60_000_000
+#else
   _clkfreq = 80_000_000
+#endif
   _clkmode = xtal1 + pll16x
   PROGBASE = $2000
   BUFSIZ = 80

@@ -53,5 +53,6 @@ p1header.bin: $(STUBSRC)
 	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=8192
 
 p2header.bin: $(STUBSRC)
-	$(SPIN2CPP) --p2 --require=3.6.4 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
+	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
+#	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvemu_p2.spin
 	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=8192

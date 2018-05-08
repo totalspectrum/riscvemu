@@ -6,5 +6,5 @@ getcnt:
 
 	.globl getcyclespersec
 getcyclespersec:	
-	li	a0, 60000000
+	li	a0, 80000000
 	ret

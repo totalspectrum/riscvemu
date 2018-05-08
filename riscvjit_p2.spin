@@ -708,6 +708,7 @@ imp_divu
 		qdiv	rs1, rs2
 	_ret_	getqx	rd
 
+
 div_by_zero
 	_ret_	neg	rd, #1
 
@@ -715,7 +716,7 @@ imp_remu
 		tjz	rs2, #rem_by_zero
 		qdiv	rs1, rs2
 	_ret_	getqy	rd
-
+		
 rem_by_zero
 	_ret_	mov	rd, rs1
 
@@ -725,12 +726,12 @@ imp_rem
 		call	#imp_remu
 	_ret_	negc	rd
 imp_div
-		mov	temp, rs1
-		xor	temp, rs2
+		mov	divflags, rs1
+		xor	divflags, rs2
 		abs	rs1,rs1
 		abs	rs2,rs2
 		call	#imp_divu
-		testb	temp, #31 wc	' check sign
+		testb	divflags, #31 wc	' check sign
 	_ret_	negc	rd
 
 

@@ -82,7 +82,7 @@ x26		wrlut	jmpsys,    #3+($1c<<2)
 x27		mov	x0, #0
 x28		nop
 x29		nop
-x30		nop
+x30		hubset	#$ff
 x31		jmp	#emustart
 
 		'' registers
@@ -576,20 +576,20 @@ do_bne
 		jmp	#takebranch
 		
 do_bltu
-		cmp	rs1, rs2 wc,wz
+		cmp	rs1, rs2 wcz
 	if_nc	jmp	#nexti
 		jmp	#takebranch
 do_blt
-		cmps	rs1, rs2 wc,wz
+		cmps	rs1, rs2 wcz
 	if_nc	jmp	#nexti
 		jmp	#takebranch
 		
 do_bgeu
-		cmp	rs1, rs2 wc,wz
+		cmp	rs1, rs2 wcz
 	if_c	jmp	#nexti
 		jmp	#takebranch
 do_bge
-		cmps	rs1, rs2 wc,wz
+		cmps	rs1, rs2 wcz
 	if_c	jmp	#nexti
 		jmp	#takebranch
 

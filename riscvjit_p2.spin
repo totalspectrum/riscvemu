@@ -36,7 +36,7 @@ CON
   RX_PIN = 63
   TX_PIN = 62
   
-  CYCLES_PER_SEC = 60_000_000
+  CYCLES_PER_SEC = 80_000_000
   
 PUB start(params)
   coginit(0, @enter, 0)
@@ -51,7 +51,7 @@ x3		nop
 
 x4		loc	ptrb, #BASE_OF_MEM
 x5		nop
-x6		nop
+x6		hubset	#$ff
 x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
@@ -119,7 +119,7 @@ recompile
 		mov	cachecnt, #4
 cachelp
 		rdlong	opcode, ptrb++
-		test	opcode, #3 wc,wz
+		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
   		call	#decodei
 		mov	temp, opcode
@@ -508,12 +508,12 @@ imp_jalr
 ''       "b" selects for signed (0) or unsigned (1) compare
 ''       "c" inverts the sense of a
 '' the output will look like:
-''        cmp[s] rs1, rs2 wc,wz
+''        cmp[s] rs1, rs2 wcz
 ''  if_z  loc ptrb, ##newpc
 ''  if_z  ret
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-cmps_instr	cmps	rs1, rs2 wc,wz
-cmp_instr	cmp	rs1, rs2 wc,wz
+cmps_instr	cmps	rs1, rs2 wcz
+cmp_instr	cmp	rs1, rs2 wcz
 cmp_flag	long	0
 ret_instr
 		ret
@@ -705,7 +705,6 @@ imp_muluh
     		'' calculate rs1 / rs2
 imp_divu
 		tjz	rs2, #div_by_zero
-		setq	#0
 		qdiv	rs1, rs2
 	_ret_	getqx	rd
 
@@ -714,7 +713,6 @@ div_by_zero
 
 imp_remu
 		tjz	rs2, #rem_by_zero
-		setq	#0
 		qdiv	rs1, rs2
 	_ret_	getqy	rd
 
@@ -858,8 +856,8 @@ start_of_tables
 mathtab
 		add	0,regfunc    wz	' wz indicates we want add/sub
 		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
-		cmps	0,sltfunc    wc,wz
-		cmp	0,sltfunc    wc,wz
+		cmps	0,sltfunc    wcz
+		cmp	0,sltfunc    wcz
 		xor	0,regfunc
 		shr	0,regfunc    wc	' wc indicates we want shr/sar
 		or	0,regfunc

@@ -721,9 +721,11 @@ rem_by_zero
 	_ret_	mov	rd, rs1
 
 imp_rem
-		abs	rs1, rs1 wc	' remainder should have sign of rs1
+		mov	divflags, rs1	' remainder should have sign of rs1
+		abs	rs1, rs1
 		abs	rs2, rs2
 		call	#imp_remu
+		testb	divflags, #31 wc
 	_ret_	negc	rd
 imp_div
 		mov	divflags, rs1

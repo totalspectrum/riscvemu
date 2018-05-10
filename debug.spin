@@ -172,7 +172,7 @@ PUB readNum | c,x,i,scale
     elseif (c => "a" AND c =< "f")
       x := x + scale*(10+c-"a")
     else
-      ser.str("Bad character: ")
+      ser.str(string("Bad character: "))
       ser.tx(c)
       nl
     scale := scale * 16

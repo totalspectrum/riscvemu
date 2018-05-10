@@ -1,3 +1,6 @@
+#define USE_CORDIC
+'#define CHECK_WRITES
+'#define DEBUG
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017 Total Spectrum Software Inc.
@@ -29,8 +32,6 @@
      BC0 - UART register
      C00 - cycle counter   
 }}
-'#define CHECK_WRITES
-'#define DEBUG
 
 VAR
   long cog			' 1 + the cog id of the cog running the emulator
@@ -631,6 +632,7 @@ dorem
 	if_c	neg	dest, dest
 		jmp	#write_and_nexti
 
+#ifdef USE_CORDIC
 umul
 		qmul	dest, rs2
 		getqx	dest
@@ -643,6 +645,53 @@ udiv
 		qdiv	dest, rs2	' dest/rs2
 		getqx	dest  		' quotient
     _ret_	getqy	desth		' remainder
+#else
+umul
+		'' multiply dest * rs2
+		'' result in dest,desth
+		mov	rs1, dest
+		mov	dest, #0
+		mov	desth, #0
+		mov	temp, #0
+umul_loop
+		shr	rs2, #1 wc, wz
+  if_nc		jmp	#umul_skip_add
+  		add	dest, rs1 wc
+		addx	desth, temp
+umul_skip_add
+  		add	rs1, rs1 wc
+		addx	temp, temp
+  if_nz		jmp	#umul_loop
+
+umul_ret	ret
+
+		'' calculate dest / rs2; result in dest, remainder in desth
+udiv
+		mov	rs1, dest
+		cmp	rs2, #0 wz
+  if_z		jmp	#div_by_zero
+
+		neg	desth, #1	' shift count
+		modcz	0,0 wc		' clear carry
+		
+  		' align divisor to leftmost bit
+.alignlp	
+		rcl	rs2, #1	 wc
+  if_nc		djnz	desth, #.alignlp
+		rcr	rs2, #1			' restore the 1 bit we just nuked
+		neg	desth, desth		' shift count (we started at -1 and counted down)
+
+  		mov	dest, #0
+.div_loop
+		cmpsub	rs1, rs2 wc
+		rcl	dest, #1
+		shr	rs2, #1
+		djnz	desth, #.div_loop
+		
+		mov	desth, rs1
+
+udiv_ret	ret
+#endif
 
 div_by_zero
 		neg	dest, #1

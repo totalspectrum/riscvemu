@@ -1,3 +1,4 @@
+#define USE_CORDIC
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017 Total Spectrum Software Inc.
@@ -20,7 +21,7 @@
      We pre-compile instructions and run them from a cache.
      Each RISC-V instruction maps to up to 4 PASM instructions.
      They run inline until the end of the cache, where we have to
-     have a return (probably through a _ret_ prefix). On return
+     have a return (usually through a _ret_ prefix). On return
      the ptrb register contains the next pc we should execute;
      this is initialized to the next pc after the cache, so if
      we fall through everything is good.
@@ -279,7 +280,7 @@ mov_temp_op
 ''    mov rs1, <rs1>
 ''    mov rs2, <rs2>
 ''    call #routine
-''    mov <rd>, dest
+''    mov <rd>, rd
 multab
 	call	#\imp_mul
 	call	#\illegalinstr
@@ -694,6 +695,8 @@ waitcmdclear_ret
 '=========================================================================
 ' MATH ROUTINES
 '=========================================================================
+
+#ifdef USE_CORDIC
 imp_mul
 		qmul	rs1, rs2
     _ret_	getqx	rd
@@ -709,14 +712,66 @@ imp_divu
 	_ret_	getqx	rd
 
 
-div_by_zero
-	_ret_	neg	rd, #1
-
 imp_remu
 		tjz	rs2, #rem_by_zero
 		qdiv	rs1, rs2
 	_ret_	getqy	rd
+#else
+desth		long	0
+
+
+imp_muluh
+		call	#imp_mul
+	_ret_	mov	rd, desth
+
+imp_remu	call	#imp_divu
+	_ret_	mov	rd, desth
 		
+imp_mul
+		'' multiply rs1 * rs2
+		'' result in rd,desth
+		mov	rd, #0
+		mov	desth, #0
+		mov	temp, #0
+umul_loop
+		shr	rs2, #1 wc, wz
+  if_nc		jmp	#umul_skip_add
+  		add	rd, rs1 wc
+		addx	desth, temp
+umul_skip_add
+  		add	rs1, rs1 wc
+		addx	temp, temp
+  if_nz		jmp	#umul_loop
+
+  		ret
+
+		'' calculate rs1 / rs2; result in rd, remainder in desth
+imp_divu
+		cmp	rs2, #0 wz
+  if_z		jmp	#div_by_zero
+
+		neg	desth, #1	' shift count
+		modcz	0,0 wc 	  	' clear carry		
+  		' align divisor to leftmost bit
+.alignlp	
+		rcl	rs2, #1	 wc
+  if_nc		djnz	desth, #.alignlp
+		rcr	rs2, #1			' restore the 1 bit we just nuked
+		neg	desth, desth		' shift count (we started at -1 and counted down)
+
+  		mov	rd, #0
+.div_loop
+		cmpsub	rs1, rs2 wc
+		rcl	rd, #1
+		shr	rs2, #1
+		djnz	desth, #.div_loop
+		
+	_ret_	mov	desth, rs1
+#endif
+
+div_by_zero
+	_ret_	neg	rd, #1
+
 rem_by_zero
 	_ret_	mov	rd, rs1
 

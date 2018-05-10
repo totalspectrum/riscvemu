@@ -31,7 +31,7 @@ STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
 
 OBJS?=$(START) $(PROGOBJS) $(LIBOBJS)
 
-all: p1.binary p2.binary
+all: p1.binary p2.binary p2emu.binary
 
 $(PROG).bin: $(OBJS)
 	$(LD) -T $(LINKFILE) -o $(PROG).elf $(OBJS)
@@ -45,6 +45,9 @@ p1.binary: $(PROG).bin p1header.bin
 p2.binary: $(PROG).bin p2header.bin
 	cat p2header.bin $(PROG).bin > p2.binary
 
+p2emu.binary: $(PROG).bin p2emuheader.bin
+	cat p2emuheader.bin $(PROG).bin > p2emu.binary
+
 clean:
 	rm -rf *.o *.elf *.lst *.bin *.binary *.pasm *.p2asm
 
@@ -52,7 +55,10 @@ p1header.bin: $(STUBSRC)
 	$(SPIN2CPP) --code=hub --data=hub --asm --binary -o p1header.bin ../debug.spin
 	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=8192
 
+p2emuheader.bin: $(STUBSRC)
+	$(SPIN2CPP) --require=3.7.2 --p2 --code=hub --data=hub --asm --binary -o p2emuheader.bin ../debug.spin
+	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=8192
+
 p2header.bin: $(STUBSRC)
 	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
-#	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvemu_p2.spin
 	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=8192

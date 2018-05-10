@@ -5,11 +5,7 @@
 }} 
 
 CON
-#ifdef __P2__
-  _clkfreq = 60_000_000
-#else
   _clkfreq = 80_000_000
-#endif
   _clkmode = xtal1 + pll16x
   PROGBASE = $2000
   BUFSIZ = 80
@@ -17,8 +13,7 @@ CON
 OBJ
 #ifdef __P2__
   ser: "SimpleSerial"
-'  proc: "riscvemu_p2.spin"
-  proc: "riscvjit_p2.spin"
+  proc: "riscvemu_p2.spin"
 #else
   ser: "FullDuplexSerial"
   proc: "riscvemu.spin"
@@ -100,9 +95,6 @@ PUB demo | cmd, arg, c, x
       regs[39] := 1
       waitforkey
     elseif (cmd == $f) ' write a byte
-      if (arg == $a) ' newline
-        nl
-      else
         ser.tx(arg)
     cmdreg := 0
 

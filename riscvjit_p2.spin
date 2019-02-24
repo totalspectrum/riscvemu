@@ -37,8 +37,9 @@ CON
   RX_PIN = 63
   TX_PIN = 62
   
-  CYCLES_PER_SEC = 80_000_000
-  
+  CLOCK_MODE = $010007f8
+  CYCLES_PER_SEC = 160_000_000
+    
 PUB start(params)
   coginit(0, @enter, 0)
 
@@ -52,7 +53,7 @@ x3		nop
 
 x4		loc	ptrb, #BASE_OF_MEM
 x5		nop
-x6		hubset	#$ff
+x6		call    #\@clkset
 x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
@@ -949,6 +950,8 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 end_of_tables
 
+clock_mode_bits
+		long	CLOCK_MODE
 		fit	$1f0
 
 ''
@@ -957,6 +960,13 @@ end_of_tables
 ''
 
 		orgh $800
+clkset
+                hubset #0
+                hubset clock_mode_bits
+                waitx  ##20_000_000/100
+		add    clock_mode_bits, #3
+                hubset clock_mode_bits
+                ret
 
 		'' print single character in uartchar
 ser_tx
@@ -967,7 +977,7 @@ ser_tx
 		getct	waitcycles
 		mov	uartcnt, #10
 sertxlp
-		add	waitcycles, ##(CYCLES_PER_SEC/115_200)	'' 115_200 baud
+		add	waitcycles, ##(CYCLES_PER_SEC/230_400)	'' 115_200 baud
 		mov	temp, waitcycles
 		addct1	temp, #0
 		waitct1

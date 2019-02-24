@@ -33,7 +33,7 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $8000   ' 32K
+  TOP_OF_MEM = $40000   ' 128K
   RX_PIN = 63
   TX_PIN = 62
   
@@ -48,7 +48,7 @@ DAT
 enter
 x0		nop
 x1		jmp	#x3
-x2		long	TOP_OF_MEM
+x2		long	TOP_OF_MEM  ' initial value for stack pointer
 x3		nop
 
 x4		loc	ptrb, #BASE_OF_MEM
@@ -977,7 +977,7 @@ ser_tx
 		getct	waitcycles
 		mov	uartcnt, #10
 sertxlp
-		add	waitcycles, ##(CYCLES_PER_SEC/230_400)	'' 115_200 baud
+		add	waitcycles, ##(CYCLES_PER_SEC/230_400)	'' 230_400 baud
 		mov	temp, waitcycles
 		addct1	temp, #0
 		waitct1

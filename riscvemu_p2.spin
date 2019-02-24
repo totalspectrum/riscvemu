@@ -83,7 +83,7 @@ x26		wrlut	jmpsys,    #3+($1c<<2)
 x27		mov	x0, #0
 x28		nop
 x29		nop
-x30		hubset	#$ff
+x30		nop
 x31		jmp	#emustart
 
 		'' registers

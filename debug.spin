@@ -5,17 +5,22 @@
 }} 
 
 CON
+#ifdef __P2__
+  _clkfreq = 160_000_000
+  _clkmode = $010007f8
+#else  
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
+#endif  
   PROGBASE = $2000
   BUFSIZ = 80
   
 OBJ
 #ifdef __P2__
-  ser: "SimpleSerial"
+  ser: "SimpleSerial.spin"
   proc: "riscvemu_p2.spin"
 #else
-  ser: "FullDuplexSerial"
+  ser: "FullDuplexSerial.spin"
   proc: "riscvemu.spin"
 #endif
 
@@ -51,7 +56,12 @@ VAR
   byte buf[BUFSIZ]
 
 PUB demo | cmd, arg, c, x
+#ifdef __P2__
+  clkset(_clkmode, _clkfreq)
+  ser.start(63, 62, 0, 230400) ' wrong, but works :(
+#else  
   ser.start(31, 30, 0, 115200)
+#endif  
   ser.str(string("Processor emulation", 13, 10))
   ser.str(string("starting emulation; base="))
   ser.hex(PROGBASE, 8)

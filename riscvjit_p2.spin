@@ -799,14 +799,24 @@ not_standard
 		cmp	immval, #$1C0 wz
 	if_nz	jmp	#not_uart
 
+		'' we can only actually read *or* write
+		'' if rd is x0, then we are writing
+		cmp	rd, #0 wz
+	if_z	jmp	#skip_uart_read
+		setd	uart_recv_instr+1, rd
+		mov	opptr, #uart_recv_instr
+		jmp	#emit2
+
+skip_uart_read
 		'' if rs1 is x0, skip any writes
    		cmp	rs1, #0 wz
 	if_z	jmp	#emit_nop
 	
 		'' implement uart
-  		sets	wrcmd_instr, rs1
-		mov	opptr, #wrcmd_instr
+  		sets	uart_send_instr, rs1
+		mov	opptr, #uart_send_instr
 		jmp	#emit2		' return from there to caller
+
 not_uart
 		cmp	immval, #$1C1 wz
 	if_nz	jmp	#not_wait
@@ -823,11 +833,13 @@ getct_instr
 waitcnt_instr
 		addct1 0-0, #0
 		waitct1
-wrcmd_instr
+uart_send_instr
 		mov	uartchar, 0-0
 		call	#\ser_tx
+uart_recv_instr
+		call	#\ser_rx
+		mov	0-0, uartchar
 
-		
 '=========================================================================
 		'' VARIABLES
 temp		long 0

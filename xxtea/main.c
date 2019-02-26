@@ -5,6 +5,7 @@
 extern int iprintf(const char *, ...);
 
 extern unsigned int getcnt();
+extern int getbyte();
 extern unsigned int getcyclespersec();
 extern void waitcnt(unsigned x);
 
@@ -25,8 +26,13 @@ int main(int argc, char* argv[])
 {
     clock_t start, end;
     int i;
-    iprintf("xxtea test\n");
-    sleep(2);
+    iprintf("xxtea test: press 'a' to begin\n");
+    for(;;) {
+        i = getbyte();
+        if (i < 0) continue;
+        iprintf("got: `%c'\n", i);
+        if (i == 'a') break;
+    }
     iprintf("starting...\n");
     start = getcnt();
     btea (testVector, -blockSize, (uint32_t*) key);

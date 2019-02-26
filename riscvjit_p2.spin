@@ -1,7 +1,6 @@
-#define USE_CORDIC
 {{
    RISC-V Emulator for Parallax Propeller
-   Copyright 2017 Total Spectrum Software Inc.
+   Copyright 2017-2019 Total Spectrum Software Inc.
    Terms of use: MIT License (see the file LICENSE.txt)
 
    An emulator for the RISC-V processor architecture, designed to run
@@ -14,14 +13,14 @@
    or special registers use the CSR instructions. CSRs we know about:
       7Fx - COG registers 1F0-1FF
       BC0 - UART register
-      BC1 - wait register
+      BC1 - wait register  (writing here causes us to wait until a particular cycle)
       C00 - cycle counter
 
    Theory of operation:
      We pre-compile instructions and run them from a cache.
      Each RISC-V instruction maps to up to 4 PASM instructions.
      They run inline until the end of the cache, where we have to
-     have a return (usually through a _ret_ prefix). On return
+     have a return (probably through a _ret_ prefix). On return
      the ptrb register contains the next pc we should execute;
      this is initialized to the next pc after the cache, so if
      we fall through everything is good.
@@ -33,13 +32,18 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $40000   ' 128K
+  TOP_OF_MEM = $8000   ' 32K
   RX_PIN = 63
   TX_PIN = 62
   
-  CLOCK_MODE = $010007f8
+  '' smart pin modes
+  _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
+  _rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
+
   CYCLES_PER_SEC = 160_000_000
-    
+  CLOCK_MODE = $010007f8
+  BAUD = 230_400
+  
 PUB start(params)
   coginit(0, @enter, 0)
 
@@ -48,12 +52,12 @@ DAT
 enter
 x0		nop
 x1		jmp	#x3
-x2		long	TOP_OF_MEM  ' initial value for stack pointer
+x2		long	TOP_OF_MEM
 x3		nop
 
 x4		loc	ptrb, #BASE_OF_MEM
 x5		nop
-x6		call    #\@clkset
+x6		hubset	#0
 x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
@@ -63,7 +67,7 @@ x10		wrlut	x3,x1
 x11		djnz	x1,#x10
 
 x12		loc	ptra, #boot_msg
-x13		call	#ser_str
+x13		call	#ser_init
 x14		nop
 x15		jmp	#startup
 
@@ -163,40 +167,40 @@ do_illegalinstr
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 optable
 {00}		long	loadtab		' load
-{01}		cmp	0, illegalinstr	' float load
-{02}		cmp	0, illegalinstr	' custom0
-{03}		cmp	0, illegalinstr	' fence
+{01}		and	0, illegalinstr	' float load
+{02}		and	0, illegalinstr	' custom0
+{03}		and	0, illegalinstr	' fence
 {04}		long	mathtab		' math immediate: points to sub table
-{05}		cmp	0,auipc		' auipc
-{06}		cmp	0,illegalinstr	' wide math imm
-{07}		cmp	0,illegalinstr	' ???
+{05}		and	0,auipc		' auipc
+{06}		and	0,illegalinstr	' wide math imm
+{07}		and	0,illegalinstr	' ???
 
 {08}		long	storetab	' store
-{09}		cmp	0,illegalinstr	' float store
-{0A}		cmp	0,illegalinstr	' custom1
-{0B}		cmp	0,illegalinstr	' atomics
+{09}		and	0,illegalinstr	' float store
+{0A}		and	0,illegalinstr	' custom1
+{0B}		and	0,illegalinstr	' atomics
 {0C}		long	mathtab		' math reg<->reg
-{0D}		cmp	0,lui		' lui
-{0E}		cmp	0,illegalinstr	' wide math reg
-{0F}		cmp	0,illegalinstr	' ???
+{0D}		and	0,lui		' lui
+{0E}		and	0,illegalinstr	' wide math reg
+{0F}		and	0,illegalinstr	' ???
 
-{10}		cmp	0,illegalinstr
-{11}		cmp	0,illegalinstr
-{12}		cmp	0,illegalinstr
-{13}		cmp	0,illegalinstr
-{14}		cmp	0,illegalinstr
-{15}		cmp	0,illegalinstr
-{16}		cmp	0,illegalinstr	' custom2
-{17}		cmp	0,illegalinstr
+{10}		and	0,illegalinstr
+{11}		and	0,illegalinstr
+{12}		and	0,illegalinstr
+{13}		and	0,illegalinstr
+{14}		and	0,illegalinstr
+{15}		and	0,illegalinstr
+{16}		and	0,illegalinstr	' custom2
+{17}		and	0,illegalinstr
 
-{18}		cmp	0,condbranch	' conditional branch
-{19}		cmp	0,jalr
-{1A}		cmp	0,illegalinstr
-{1B}		cmp	0,jal
+{18}		and	0,condbranch	' conditional branch
+{19}		and	0,jalr
+{1A}		and	0,illegalinstr
+{1B}		and	0,jal
 {1C}		long	systab	' system
-{1D}		cmp	0,illegalinstr
-{1E}		cmp	0,illegalinstr	' custom3
-{1F}		cmp	0,illegalinstr
+{1D}		and	0,illegalinstr
+{1E}		and	0,illegalinstr	' custom3
+{1F}		and	0,illegalinstr
 
 
 sardata		sar	0,0
@@ -281,7 +285,7 @@ mov_temp_op
 ''    mov rs1, <rs1>
 ''    mov rs2, <rs2>
 ''    call #routine
-''    mov <rd>, rd
+''    mov <rd>, dest
 multab
 	call	#\imp_mul
 	call	#\illegalinstr
@@ -696,8 +700,6 @@ waitcmdclear_ret
 '=========================================================================
 ' MATH ROUTINES
 '=========================================================================
-
-#ifdef USE_CORDIC
 imp_mul
 		qmul	rs1, rs2
     _ret_	getqx	rd
@@ -713,66 +715,14 @@ imp_divu
 	_ret_	getqx	rd
 
 
+div_by_zero
+	_ret_	neg	rd, #1
+
 imp_remu
 		tjz	rs2, #rem_by_zero
 		qdiv	rs1, rs2
 	_ret_	getqy	rd
-#else
-desth		long	0
-
-
-imp_muluh
-		call	#imp_mul
-	_ret_	mov	rd, desth
-
-imp_remu	call	#imp_divu
-	_ret_	mov	rd, desth
 		
-imp_mul
-		'' multiply rs1 * rs2
-		'' result in rd,desth
-		mov	rd, #0
-		mov	desth, #0
-		mov	temp, #0
-umul_loop
-		shr	rs2, #1 wc, wz
-  if_nc		jmp	#umul_skip_add
-  		add	rd, rs1 wc
-		addx	desth, temp
-umul_skip_add
-  		add	rs1, rs1 wc
-		addx	temp, temp
-  if_nz		jmp	#umul_loop
-
-  		ret
-
-		'' calculate rs1 / rs2; result in rd, remainder in desth
-imp_divu
-		cmp	rs2, #0 wz
-  if_z		jmp	#div_by_zero
-
-		neg	desth, #1	' shift count
-		modcz	0,0 wc 	  	' clear carry		
-  		' align divisor to leftmost bit
-.alignlp	
-		rcl	rs2, #1	 wc
-  if_nc		djnz	desth, #.alignlp
-		rcr	rs2, #1			' restore the 1 bit we just nuked
-		neg	desth, desth		' shift count (we started at -1 and counted down)
-
-  		mov	rd, #0
-.div_loop
-		cmpsub	rs1, rs2 wc
-		rcl	rd, #1
-		shr	rs2, #1
-		djnz	desth, #.div_loop
-		
-	_ret_	mov	desth, rs1
-#endif
-
-div_by_zero
-	_ret_	neg	rd, #1
-
 rem_by_zero
 	_ret_	mov	rd, rs1
 
@@ -925,20 +875,20 @@ loadtab
 		rdbyte	0, #loadop
 		rdword	0, #loadop
 		rdlong	0, #loadop
-		cmp	0, illegalinstr
+		and	0, illegalinstr
 		rdbyte	SIGNBYTE, #loadop wc
 		rdword	SIGNWORD, #loadop wc
 		rdlong	0, #loadop
-		cmp	0, illegalinstr
+		and	0, illegalinstr
 storetab
 		wrbyte	0, #storeop
 		wrword	0, #storeop
 		wrlong	0, #storeop
-		cmp	0, illegalinstr
-		cmp	0, illegalinstr
-		cmp	0, illegalinstr
-		cmp	0, illegalinstr
-		cmp	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
 
 systab		jmp	#\illegalinstr
 		mov	0,csrrw
@@ -950,43 +900,50 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 end_of_tables
 
-clock_mode_bits
-		long	CLOCK_MODE
 		fit	$1f0
 
 ''
-'' some lesser used routines we wanted to put in HUB
-'' but as presently organized, that's difficult :(
+'' some lesser used routines that can go in HUB memory
 ''
 
 		orgh $800
-clkset
-                hubset #0
-                hubset clock_mode_bits
-                waitx  ##20_000_000/100
-		add    clock_mode_bits, #3
-                hubset clock_mode_bits
-                ret
 
 		'' print single character in uartchar
 ser_tx
-		dirh	#TX_PIN
-		outh	#TX_PIN
-		or	uartchar, #256
-		shl	uartchar, #1
-		getct	waitcycles
-		mov	uartcnt, #10
-sertxlp
-		add	waitcycles, ##(CYCLES_PER_SEC/230_400)	'' 230_400 baud
-		mov	temp, waitcycles
-		addct1	temp, #0
-		waitct1
-		test	uartchar, #1 wc
-		outc	#TX_PIN
-		shr	uartchar, #1
-		djnz	uartcnt, #sertxlp
+		wypin	uartchar, #TX_PIN
+		waitx	#20
+.txflush
+		testp	#TX_PIN wc
+	if_nc	jmp	#.txflush
 		ret
 
+		'' receive a single character into uartchar
+		'' or set it to -1 if no character available
+ser_rx
+		neg	uartchar, #1
+		testp	#RX_PIN wc
+	if_c	rdpin	uartchar, #RX_PIN
+	if_c	shr	uartchar, #24
+		ret
+		
+		'' init the serial port
+		'' this sets up the RX and TX pins as smart pins
+		'' and then falls through to ser_str to print
+		'' a startup message
+ser_init
+		' set system clock
+		hubset	##CLOCK_MODE
+		waitx	##20_000_000/100
+		hubset	##CLOCK_MODE+3
+
+		mov	x4, ##7 + ((CYCLES_PER_SEC / BAUD) << 16) ' bitperiod
+		wrpin	##_txmode, #TX_PIN
+		wxpin	x4, #TX_PIN
+		dirh	#TX_PIN
+		wrpin	##_rxmode, #RX_PIN
+		wxpin	x4, #RX_PIN
+		dirh	#RX_PIN
+		
 		'' print string pointed to by ptra
 ser_str
 		rdbyte	uartchar, ptra++ wz

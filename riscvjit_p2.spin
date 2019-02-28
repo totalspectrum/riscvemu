@@ -485,9 +485,10 @@ emit_save_retaddr
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
 		call	#emit_mvi	' move into rd
-		
-		wrlut	ret_instr, cacheptr
-	_ret_	add	cacheptr, #1
+
+		'' and make sure there's a _ret_ suffix
+		mov    cmp_flag, #0
+		jmp    #reset_compare_flag
 
 jalr
 		' set up offset in ptrb

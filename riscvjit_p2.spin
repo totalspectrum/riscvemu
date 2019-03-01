@@ -14,6 +14,7 @@
       7Fx - COG registers 1F0-1FF
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
+      BC2 - debug register; writing here dumps a checksum of memory
       C00 - cycle counter
 
    Theory of operation:
@@ -26,13 +27,14 @@
      we fall through everything is good.
 }}
 
+'#define SPECIAL_DEBUG
 
 CON
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $8000   ' 32K
+  TOP_OF_MEM = $42000   ' 256K + 8K
   RX_PIN = 63
   TX_PIN = 62
   
@@ -55,7 +57,7 @@ x1		jmp	#x3
 x2		long	TOP_OF_MEM
 x3		nop
 
-x4		loc	ptrb, #BASE_OF_MEM
+x4		loc	ptrb, #\BASE_OF_MEM
 x5		nop
 x6		hubset	#0
 x7		mov	x1, #$1ff	' will count down
@@ -66,7 +68,7 @@ x9		nop
 x10		wrlut	x3,x1
 x11		djnz	x1,#x10
 
-x12		loc	ptra, #boot_msg
+x12		loc	ptra, #\boot_msg
 x13		call	#ser_init
 x14		nop
 x15		jmp	#startup
@@ -80,31 +82,42 @@ info1		long	0	' debug info
 info2		long	0	' debug info
 info3		long	0
 info4		long	0
-rununtil	long	0
-stepcount	long	1	' start in single step mode
-		
+memstart	long	BASE_OF_MEM
+memend		long	TOP_OF_MEM
+debug_trace	long	0
+
 		'' now start execution
 startup
 		mov	temp,#15
 .lp		altd	temp, #x2
 		mov	0-0, #0
 		djnz	temp, #.lp
-		
+
+		'' set the pc to ptrb
 set_pc
-		getbyte	cachepc, ptrb, #0	' low 2 bits of ptrb must be 0
+		andn	ptrb, #3		' ignore low bits of ptrb
+		test	debug_trace, #1	wz
+	if_nz	call	#\debug_print
+		getbyte	cachepc, ptrb, #0
+		andn	cachepc, #3    		''  FIXME debug check
 		getnib	tagidx, ptrb, #1
-{{
-		mov	info3, ptrb
-		mov	info4, cachepc
-		call	#checkdebug
-}}
 		add	tagidx, #$100		' start of tag data
-		andn	ptrb, #$f      	     	' back ptrb up to start of line
+		andn	ptrb, #$f     	     	' back ptrb up to start of line
 		rdlut	temp, tagidx
 		cmp	ptrb, temp wz
+#ifdef SPECIAL_DEBUG
+		call	#recompile
+#else		
 	if_z	add	ptrb, #16	' skip to start of next line
 	if_nz	call	#recompile
+#endif	
 		push	#set_pc
+#ifdef SPECIAL_DEBUG
+		cmp	ptrb, ##$4770 wz
+	if_nz	jmp	#.skip_special
+		call	#dump_cache
+#endif		
+.skip_special
 		add	cachepc, CACHE_START
 		jmp	cachepc
 
@@ -124,7 +137,8 @@ recompile
 		getbyte	cacheptr, ptrb, #0
 		mov	cachecnt, #4
 cachelp
-		rdlong	opcode, ptrb++
+		rdlong	opcode, ptrb
+		add	ptrb, #4
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
   		call	#decodei
@@ -146,7 +160,6 @@ pad_instructions
 		test	cacheptr, #3 wz
 	if_nz	call	#emit_nop
 	if_nz	jmp	#pad_instructions
-
 		djnz	cachecnt, #cachelp
 		'' finish the cache line
 
@@ -352,8 +365,9 @@ sltfunc_pat
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
 '' these look like:
-''     mov ptra, rs1
-''     rdlong rd, ptra[##immval] wc
+''     loc ptra, #immval
+''     add ptra, rs1
+''     rdlong rd, ptra wc
 ''     muxc rd, SIGNMASK (optional, only if wc set on prev. instruction)
 ''
 '' the opdata field has:
@@ -375,29 +389,39 @@ loadop
 		cmp	rd, #0	wz	' if rd == 0, emit nop
 	if_z	jmp	#emit_nop
 ldst_common
-		sets	movptra, rs1
-		wrlut	movptra, cacheptr
-		add	cacheptr, #1
 		and	immval, AUGPTR_MASK
-		bith	immval, #23	' set to force ptra relative
+		andn	locptra, AUGPTR_MASK
+		or	locptra, immval
+		sets	addptra, rs1
+		mov	opptr, #locptra
+		call	#emit2
 
-		'' check for sign extend
-		'' the dest field of opdata will have the mask we
-		'' should use to sign extend, or 0 for no sign extension
+		'' now the actual rd/wr instruction
+		'' opdata contains a template like
+		''   rdword SIGNWORD, loadop wc
+		''
 		mov	signmask, opdata ' save potential sign mask
 		shr	signmask, #9
-		and	signmask, #$1ff wz
-		mov	dest, rd
-		call	#emit_big_instr
-		cmp	signmask, #0 wz
+		and	signmask, #$1ff wz ' remember if there is a sign mask
+		'' now change the opdata to look like
+		''   rdword rd, ptra
+		sets	opdata, #ptra
+		setd	opdata, rd
+		wrlut	opdata, cacheptr
+		add	cacheptr, #1
+		'' see if we need a sign extension instruction
 	if_z	ret
 		setd	signext_instr, rd
 		sets	signext_instr, signmask
 		wrlut	signext_instr, cacheptr
 	_ret_	add	cacheptr, #1
 
-movptra
-		mov	ptra, 0-0
+locptra
+		loc	ptra, #\0
+addptra
+		add	ptra, 0-0
+ioptra
+		rdlong  0-0, ptra
 signext_instr
 		muxc	0-0, 0-0
 signmask
@@ -409,13 +433,13 @@ AUGPTR_MASK
 
 sysinstr
 illegalinstr
+		mov	immval, ptrb
+		call	#emit_pc_immval_minus_4
 		mov	opptr, #imp_illegal
-		jmp	#emit3
+		jmp	#emit1
 
 imp_illegal
-		mov	uartchar, #$69
-		call	#\ser_tx
-		jmp	#imp_illegal
+		call	#\illegal_instr_error
 
     		'' deconstruct instr
 decodei
@@ -451,19 +475,14 @@ LUI_MASK	long	$fffff000
 {{
    template for jal rd, offset
 imp_jal
-		loc	ptrb, #newpc   (compile time pc+offset)
+		loc	ptrb, #\newpc   (compile time pc+offset)
     _ret_	mov	rd, ##retaddr  (compile time pc+4)
 
    template for jalr rd, rs1, offset
 imp_jalr
-		loc	ptrb, #offset
+		loc	ptrb, #\offset
 		add	ptrb, rs1
-		mov	rd, ##retaddr
-
-    small offset case (including typical 0 offset) goes:
-    		mov	ptrb, rs1
-		add/sub	ptrb, #offset
-    _ret_	mov	rd, ##retaddr
+   _ret_	mov	rd, ##retaddr  (compile time pc+4)
 }}
 
 
@@ -473,32 +492,38 @@ jal
 		mov	immval, opcode
 		sar	immval, #20	' sign extend, get some bits in place
 		and	immval, Jmask
+		test	immval, #1 wc	' check old bit 20
 		mov	temp, opcode
 		andn	temp, Jmask
 		or	immval, temp
-		test	immval, #1 wc	' check old bit 20
 		andn	immval, #1  	' clear low bit
-		bitc	immval, #11	' set bit 11
+		muxc	immval, ##(1<<11)
 		add	immval, ptrb	' calculate branch target
 		call	#emit_pc_immval_minus_4
-emit_save_retaddr
+
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
 		call	#emit_mvi	' move into rd
-
-		'' and make sure there's a _ret_ suffix
-		mov    cmp_flag, #0
-		jmp    #reset_compare_flag
+		
+		wrlut	ret_instr, cacheptr
+	_ret_	add	cacheptr, #1
 
 jalr
 		' set up offset in ptrb
-		and	immval, LOC_MASK
+		and	immval, LOC_MASK wz
+	if_nz	jmp	#illegalinstr    '' FIXME DEBUG CODE
 		andn	imp_jalr, LOC_MASK
 		or	imp_jalr, immval
 		sets	imp_jalr+1, rs1
 		mov	opptr, #imp_jalr
 		call	#emit2
-		jmp	#emit_save_retaddr
+		' now emit the final load
+		mov	immval, ptrb	' get return address
+		mov	dest, rd
+		call	#emit_mvi	' move into rd
+		' now flag it with a _ret_
+		mov   cmp_flag, #0
+		jmp   #reset_compare_flag
 
 imp_jalr
 		loc	ptrb, #\(0-0)
@@ -516,7 +541,7 @@ imp_jalr
 ''       "c" inverts the sense of a
 '' the output will look like:
 ''        cmp[s] rs1, rs2 wcz
-''  if_z  loc ptrb, ##newpc
+''  if_z  loc ptrb, #\newpc
 ''  if_z  ret
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 cmps_instr	cmps	rs1, rs2 wcz
@@ -651,53 +676,6 @@ mov_pat		mov	0,0
 
 CONDMASK	long	$f0000000
 
-{{#ifdef DEBUG
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-' debug routines
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
-checkdebug
-		tjz	stepcount, #checkdebug_ret
-		djnz	stepcount, #checkdebug_ret
-		call	#dumpregs
-		mov	newcmd, #1	' single step command
-		call	#sendcmd_and_wait	' send info
-		call	#readregs	' read new registers
-checkdebug_ret
-		ret
-		
-dumpregs
-		mov	shadowpc, ptrb
-		setq	#40	' transfer 38 registers
-	_ret_	wrlong	x0, dbgreg_addr
-
-readregs
-		setq	#40	' transfer 38 registers
-		rdlong	x0, dbgreg_addr
-		mov	ptrb, shadowpc
-	_ret_	mov	x0, #0		' always 0 in x0!
-
-newcmd		long 0
-sendchar
-		shl	newcmd, #4
-		or	newcmd, #$F
-sendcmd_and_wait
-		call	#waitcmdclear
-		wrlong	newcmd, cmd_addr
-		jmp	#waitcmdclear
-
-		'' this command is a little unusual in that it uses x0
-		'' as a temporary;
-		'' that's OK because at the end x0 is guaranteed
-		'' to be 0
-waitcmdclear
-		rdlong	x0, cmd_addr wz
-	if_nz	jmp	#waitcmdclear	' far end is still processing last command
-waitcmdclear_ret
-		ret
-#endif
-}}
-
 '=========================================================================
 ' MATH ROUTINES
 '=========================================================================
@@ -712,6 +690,7 @@ imp_muluh
     		'' calculate rs1 / rs2
 imp_divu
 		tjz	rs2, #div_by_zero
+		setq	#0
 		qdiv	rs1, rs2
 	_ret_	getqx	rd
 
@@ -721,6 +700,7 @@ div_by_zero
 
 imp_remu
 		tjz	rs2, #rem_by_zero
+		setq	#0
 		qdiv	rs1, rs2
 	_ret_	getqy	rd
 		
@@ -755,6 +735,103 @@ imp_div
 ''    op  <reg>, rs1
 ''
 csrrw
+		jmp	#\compile_csrw
+
+
+getct_instr
+		getct	0-0
+waitcnt_instr
+		addct1 0-0, #0
+		waitct1
+uart_send_instr
+		mov	uartchar, 0-0
+		call	#\ser_tx
+uart_recv_instr
+		call	#\ser_rx
+		mov	0-0, uartchar
+debugprint_instr
+		mov	debug_trace, 0-0
+		call	#\debug_print
+		
+'=========================================================================
+		'' VARIABLES
+temp		long 0
+dest		long 0
+
+rd		long	0
+rs1		long	0
+rs2		long	0
+immval		long	0
+funct3		long	0
+opdata
+divflags	long	0
+
+opptr		long	0
+cacheptr	long	0
+
+CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
+cachepc		long	0
+tagidx		long	0
+cachecnt	long	0
+
+uartchar	long	0
+uartcnt		long	0
+waitcycles	long	0
+
+	''
+	'' opcode tables
+	''
+start_of_tables
+''''' math indirection table
+'' upper bits are acutlly instructions we wish to use
+'' dest bits contain flags: 2 -> test for shr/sar 
+mathtab
+		add	0,regfunc    wz	' wz indicates we want add/sub
+		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
+		cmps	0,sltfunc    wcz
+		cmp	0,sltfunc    wcz
+		xor	0,regfunc
+		shr	0,regfunc    wc	' wc indicates we want shr/sar
+		or	0,regfunc
+		and	0,regfunc
+loadtab
+		rdbyte	SIGNBYTE, loadop wc
+		rdword	SIGNWORD, loadop wc
+		rdlong	0, loadop
+		and	0, illegalinstr
+		rdbyte	0, loadop
+		rdword	0, loadop
+		rdlong	0, loadop
+		and	0, illegalinstr
+storetab
+		wrbyte	0, storeop
+		wrword	0, storeop
+		wrlong	0, storeop
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+
+systab		jmp	#\illegalinstr
+		mov	0,csrrw
+		or	0,csrrw
+		andn	0,csrrw
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+		jmp	#\illegalinstr
+end_of_tables
+
+		fit	$1f0
+
+''
+'' some lesser used routines that can go in HUB memory
+''
+
+		orgh $800
+
+compile_csrw
 		getnib	funct3, immval, #2
 		and	immval, #$1FF
 
@@ -826,100 +903,13 @@ not_uart
 		jmp	#emit2		' return from there
 
 not_wait
+		cmp	immval, #$1C2 wz
+	if_nz	jmp	#not_debug
+		sets	debugprint_instr, rs1
+		mov	opptr, #debugprint_instr
+		jmp	#emit2
+not_debug
 		jmp	#illegalinstr
-
-
-getct_instr
-		getct	0-0
-waitcnt_instr
-		addct1 0-0, #0
-		waitct1
-uart_send_instr
-		mov	uartchar, 0-0
-		call	#\ser_tx
-uart_recv_instr
-		call	#\ser_rx
-		mov	0-0, uartchar
-
-'=========================================================================
-		'' VARIABLES
-temp		long 0
-dest		long 0
-dbgreg_addr	long 0	' address where registers go in HUB during debug
-cmd_addr	long 0	' address of HUB command word
-
-rd		long	0
-rs1		long	0
-rs2		long	0
-immval		long	0
-funct3		long	0
-opdata
-divflags	long	0
-
-opptr		long	0
-cacheptr	long	0
-
-CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
-cachepc		long	0
-tagidx		long	0
-cachecnt	long	0
-
-uartchar	long	0
-uartcnt		long	0
-waitcycles	long	0
-
-	''
-	'' opcode tables
-	''
-start_of_tables
-''''' math indirection table
-'' upper bits are acutlly instructions we wish to use
-'' dest bits contain flags: 2 -> test for shr/sar 
-mathtab
-		add	0,regfunc    wz	' wz indicates we want add/sub
-		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
-		cmps	0,sltfunc    wcz
-		cmp	0,sltfunc    wcz
-		xor	0,regfunc
-		shr	0,regfunc    wc	' wc indicates we want shr/sar
-		or	0,regfunc
-		and	0,regfunc
-loadtab
-		rdbyte	0, #loadop
-		rdword	0, #loadop
-		rdlong	0, #loadop
-		and	0, illegalinstr
-		rdbyte	SIGNBYTE, #loadop wc
-		rdword	SIGNWORD, #loadop wc
-		rdlong	0, #loadop
-		and	0, illegalinstr
-storetab
-		wrbyte	0, #storeop
-		wrword	0, #storeop
-		wrlong	0, #storeop
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-
-systab		jmp	#\illegalinstr
-		mov	0,csrrw
-		or	0,csrrw
-		andn	0,csrrw
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-end_of_tables
-
-		fit	$1f0
-
-''
-'' some lesser used routines that can go in HUB memory
-''
-
-		orgh $800
 
 		'' print single character in uartchar
 ser_tx
@@ -946,7 +936,7 @@ ser_rx
 ser_init
 		' set system clock
 		hubset	##CLOCK_MODE
-		waitx	##20_000_000/100
+		waitx	##20_000_000/100  ' longer than necessary
 		hubset	##CLOCK_MODE+3
 
 		mov	x4, ##7 + ((CYCLES_PER_SEC / BAUD) << 16) ' bitperiod
@@ -956,6 +946,9 @@ ser_init
 		wrpin	##_rxmode, #RX_PIN
 		wxpin	x4, #RX_PIN
 		dirh	#RX_PIN
+
+		waitx	##CYCLES_PER_SEC
+		'' fall through
 		
 		'' print string pointed to by ptra
 ser_str
@@ -966,5 +959,138 @@ ser_str
 done_str
 		ret
 
+		'' print a hex number
+		'' number is in info1
+ser_hex
+		mov	info2, #8
+.hexlp
+		getnib	uartchar, info1, #7
+		add	uartchar, #"0"
+		cmp	uartchar, #"9" wcz
+	if_a	add	uartchar, #("A"-"0") - 10
+		call	#ser_tx
+		rol	info1, #4
+		djnz	info2, #.hexlp
+		mov	uartchar, #" "
+		call	#ser_tx
+		ret
+
+		' enter with ptrb holding pc
+illegal_instr_error
+		loc	ptra, #\illegal_instruction_msg
+		call	#ser_str
+		mov	info1, ptrb
+		call	#ser_hex
+die
+		jmp	#die
+
+#ifdef DEBUG_CHECKS
+badcache
+		loc	ptra, #\cache_error_msg
+		call	#ser_str
+.lp		jmp	#.lp
+#endif
+
+		' create a checksum of memory
+		' (info1, info2) are checksum
+		' pa = start of mem block
+		' pb = end of mem block
+update_checksum
+		rdbyte	temp, pa	' x := word[ptr]
+		add	info1, temp	' c0 += x
+		add	info2, info1	' c1 += x
+		add	pa, #1 		' ptr += 2
+		cmp	pa, pb wz
+	if_ne	jmp	#update_checksum
+		ret
+		
+debug_print
+		mov	info1, #0	' c0 := 0
+		mov	info2, #0	' c1 := 0
+		mov	pa, memstart	' ptr := PROGBASE
+		mov	pb, memend
+		call	#update_checksum
+
+		' now merge in x0-x31
+		loc	pa, #reg_buf
+		loc	pb, #reg_buf_end
+		
+		setq	#31
+		wrlong	x0, pa
+		call	#update_checksum
+
+		and	info1, ##$FFFF
+		and	info2, ##$FFFF
+		shl	info2, #16
+		add	info1, info2
+		call	#ser_hex
+
+		mov	uartchar, #"@"
+		call	#ser_tx
+		mov	info1, ptrb
+		call	#ser_hex
+
+#ifdef SPECIAL_DEBUG
+		' special debug code
+		mov	uartchar, #"#"
+		call	#ser_tx
+		mov	info1, x11	' a1
+		call	#ser_hex
+		mov	uartchar, #"%"
+		call	#ser_tx
+		mov	info1, x8	' s0
+		call	#ser_hex
+#endif
+		loc	ptra, #\chksum_msg
+		call	#ser_str
+		ret
 boot_msg
 		byte	"RiscV P2 JIT", 10, 0
+chksum_msg
+		byte    "=memory chksum", 10, 0
+illegal_instruction_msg
+		byte	"*** ERROR: illegal instruction at: ", 0
+cache_error_msg
+		byte	"*** JIT ERROR: bad cache line ending", 10, 13, 0
+hex_buf
+		byte  0[8], 0
+reg_buf
+		long 0[32]
+reg_buf_end
+
+#ifdef SPECIAL_DEBUG
+cache_msg
+		byte	"cache ptrb cachepc: ", 0
+dump_cache
+		loc	ptra, #cache_msg
+		call	#ser_str
+		mov	info1, ptrb
+		call	#ser_hex
+		mov	info1, cachepc
+		call	#ser_hex
+		
+		mov	info3, #16
+		mov	info4, cachepc
+		andn	info4, #$f
+.dumplp
+		test	info4, #3 wz
+	if_nz	jmp	#.skip_nl
+		call	#ser_nl
+		mov	info1, info4
+		call	#ser_hex
+		mov	uartchar, #":"
+		call	#ser_tx
+.skip_nl
+		rdlut	info1, info4
+		call	#ser_hex
+		add	info4, #1
+		djnz	info3, #.dumplp
+
+		jmp	#ser_nl
+#endif
+ser_nl
+		mov	uartchar, #13
+		call	#ser_tx
+		mov	uartchar, #10
+		call	#ser_tx
+		ret

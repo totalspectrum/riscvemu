@@ -1,6 +1,6 @@
 #define USE_CORDIC
-'#define CHECK_WRITES
-'#define DEBUG
+#define CHECK_WRITES
+#define DEBUG
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017 Total Spectrum Software Inc.
@@ -22,6 +22,8 @@
    The lowest 4 bits contain a command, as follows:
    $1 = single step (registers have been dumped)
    $2 = illegal instruction encountered (registers have been dumped)
+   $D = request to dump checksum of memory
+   $E = request to read a character (data goes in long after command register)
    $F = request to write character in bits 12-8 of command register
 
    The host should write 0 to the command register as an "ACK" to restart the RISC-V.
@@ -30,6 +32,8 @@
   or special registers use the CSR instructions. CSRs we know about:
      7Fx - COG registers 1F0-1FF
      BC0 - UART register
+     BC1 - wait register (not implemented)
+     BC2 - debug register
      C00 - cycle counter   
 }}
 
@@ -96,11 +100,13 @@ info2		long	0	' debug info
 info3		long	0	' debug info
 info4		long	0	' debug info
 rununtil	long	0
-stepcount	long	1	' start in single step mode
+stepcount	long	1	' 1 to start in single step mode
+#ifdef DEBUG
+debugtrace	long	0
+lastpc		long	0
+#endif
 
 emustart
-		'' finally set up the shadow pc
-		rdfast	x0, shadowpc	        ' should be rdfast #0, pc, but fastspin is buggy
 		jmp	#nexti
 
 jmpillegalinstr
@@ -163,7 +169,8 @@ nexti
 #ifdef DEBUG
 		call	#checkdebug
 #endif
-		rflong	opcode
+		rdlong	opcode, shadowpc
+		add	shadowpc, #4
    		mov	temp, opcode
 		shr	temp, #7
 		and	temp, #$1f wz
@@ -348,7 +355,6 @@ luimask		long	$fffff000
 auipc
 		mov	dest, opcode
 		and	dest, luimask
-		getptr	shadowpc
 		add	dest, shadowpc
 		sub	dest, #4
 		jmp	#write_and_nexti
@@ -367,21 +373,21 @@ jal
 		test	temp, #1 wc	' check old bit 20
 		andn	temp, #1 	' clear low bit
 		muxc	temp, bit11	' set bit 11
-		getptr	dest  		' get old PC
-		mov	shadowpc, dest
+		mov	dest, shadowpc
 		sub	shadowpc, #4		' compensate for pc bump
 		add	shadowpc, temp
-		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
+		andn	shadowpc, #1	' clear low bit
 		jmp	#write_and_nexti
 
 jalr
 		call	#getrs1
 		sar	opcode, #20	' get offset
-		getptr	dest		' save old PC
+
+		mov	dest, shadowpc
 		alts	rs1, #x0
 		mov	shadowpc, 0-0	' fetch rs1 value
 		add	shadowpc, opcode
-		rdfast	x0, shadowpc		' would use #0 instead of x0 except for fastspin bug
+		andn	shadowpc, #1	' clear low bit
 		jmp	#write_and_nexti
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement load and store
@@ -392,12 +398,12 @@ jalr
 ' the load; the S field is 0 for unsigned load, 1 for signed
 
 loadtab
-		long	do_rdbyte
-		long	do_rdword
-		long	do_rdlong
-		long	illegalinstr
 		long	do_rdbytes
 		long	do_rdwords
+		long	do_rdlong
+		long	illegalinstr
+		long	do_rdbyte
+		long	do_rdword
 		long	do_rdlong
 		long	illegalinstr
 loadop
@@ -471,25 +477,17 @@ storeop
 
 iobase		long	$f0000000
 do_wrlong
-#ifdef CHECK_WRITES
-		cmp	rs1, memsize
-	if_nc	jmp	#illegalinstr
-#endif
 		wrlong	dest, rs1
+#ifdef CHECK_WRITES
+		cmp	rs1, watchaddr wz
+	if_z	call	#breakit
+#endif
 		jmp	#nexti		' no writeback
 
 do_wrword
-#ifdef CHECK_WRITES
-		cmp	rs1, memsize
-	if_nc	jmp	#illegalinstr
-#endif
 		wrword	dest, rs1
 		jmp	#nexti		' no writeback
 do_wrbyte
-#ifdef CHECK_WRITES
-		cmp	rs1, memsize
-	if_nc	jmp	#illegalinstr
-#endif
 		wrbyte	dest, rs1
 		jmp	#nexti		' no writeback
 
@@ -525,6 +523,13 @@ csrrc
 not_timer
 		cmp	opcode, ##$BC0 wz
 	if_nz	jmp	#not_uart
+		'' is this a send or receive
+		cmp	rs1, #0 wz
+	if_nz	jmp	#uart_send
+		mov	newcmd, #$E	' read
+		call	#sendrecvcmd
+		jmp	#write_and_nexti
+uart_send
 		alts	rs1, #x0
 		mov	newcmd, 0-0
 		shl	newcmd, #4
@@ -532,8 +537,20 @@ not_timer
 		call	#sendcmd
 		jmp	#nexti
 not_uart
+		cmp	opcode, ##$BC2 wz
+	if_nz	jmp	#not_debug
+		alts	rs1, #x0
+		mov	debugtrace, 0-0
+		call	#mem_checksum
+		jmp	#nexti
+not_debug
 		jmp	#illegalinstr
 
+mem_checksum
+		call	#dumpregs
+		mov	newcmd, #$D
+		jmp	#sendrecvcmd
+		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -565,10 +582,9 @@ do_beq
 	if_nz	jmp	#nexti
 		'' fall through
 takebranch
-		getptr	shadowpc
 		add	opcode, shadowpc
 		sub	opcode, #4	' opcode now has desired destination
-		rdfast	x0, opcode	' reset pc
+		mov	shadowpc, opcode
 		jmp	#nexti
 
 do_bne
@@ -703,8 +719,17 @@ div_by_zero
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 checkdebug
+		tjz	debugtrace, #skip_memchk
+		mov	temp, lastpc
+		xor	temp, shadowpc
+		andn	temp, #$F wz
+	if_z	jmp	skip_memchk
+		call	#mem_checksum
+skip_memchk
+		mov	lastpc, shadowpc
 		tjz	stepcount, #checkdebug_ret
 		djnz	stepcount, #checkdebug_ret
+breakit
 		call	#dumpregs
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
@@ -716,7 +741,6 @@ dumpregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #40*4
-		getptr	shadowpc
 		call	#cogxfr_write
 dumpregs_ret
 		ret
@@ -726,7 +750,6 @@ readregs
 		mov	hubaddr, dbgreg_addr
 		mov	hubcnt, #40*4
 		call	#cogxfr_read
-		rdfast	x0, shadowpc
 		mov	x0, #0		'
 readregs_ret
 		ret
@@ -735,6 +758,15 @@ sendcmd
 		call	#waitcmdclear
 		wrlong	newcmd, cmd_addr
 sendcmd_ret	ret
+
+sendrecvcmd
+		call	#waitcmdclear
+		wrlong	newcmd, cmd_addr
+		call	#waitcmdclear
+		add	cmd_addr, #4
+		rdlong	dest, cmd_addr
+		sub	cmd_addr, #4
+sendrecvcmd_ret	ret
 
 t0		long	0
 waitcmdclear
@@ -779,6 +811,7 @@ memsize		long 0	' size of emulated RAM
 hubaddr		long 0
 cogaddr		long 0
 hubcnt		long 0
+watchaddr	long 0  '$79f18 + (4*13)
 
 rd		long	0
 rs1		long	0

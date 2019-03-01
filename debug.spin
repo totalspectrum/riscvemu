@@ -67,7 +67,6 @@ PUB demo | cmd, arg, c, x
   ser.start(31, 30, 0, 115200)
 #endif  
   ser.str(string("Processor emulation", 13, 10))
-  memorychecksum
   ser.str(string("starting emulation; base="))
   ser.hex(PROGBASE, 8)
   params[0] := @cmdreg

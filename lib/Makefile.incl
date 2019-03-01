@@ -14,6 +14,7 @@ SPIN2CPP=/home/ersmith/Parallax/spin2cpp/build/spin2cpp
 
 ARCH ?= -march=rv32im
 OPT ?= -Os
+LDNAME ?= flat.ld
 
 AS=$(TOOLS)as
 ASFLAGS=$(ARCH)
@@ -25,7 +26,7 @@ CFLAGS=$(OPT) $(ARCH) $(CDEFS)
 
 START=$(LIB)start.o
 
-LINKFILE=$(LIB)flat.ld
+LINKFILE=$(LIB)$(LDNAME)
 
 STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
 

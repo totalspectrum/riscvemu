@@ -39,15 +39,15 @@ CON
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
 PC_CACHELINE_BITS = 5
-PC_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
+L1_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
 PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
 
 ' given a pc, we calculate the offset within a cache line by "pc & PC_CACHEOFFSET_MASK"
 PC_CACHEOFFSET_MASK = (PC_CACHELINE_LEN-1)	' finds offset within cache line
-' given a pc, we calculate the cache line number (tag index) by "(pc >> PC_CACHELINE_BITS) & PC_TAGIDX_MASK"
-PC_NUMTAGS = (1<<PC_TAGIDX_BITS)
-PC_TAGIDX_MASK = (PC_NUMTAGS-1)
+' given a pc, we calculate the cache line number (tag index) by "(pc >> PC_CACHELINE_BITS) & L1_TAGIDX_MASK"
+PC_NUMTAGS = (1<<L1_TAGIDX_BITS)
+L1_TAGIDX_MASK = (PC_NUMTAGS-1)
 
 TOTAL_CACHE_MASK = (1<<TOTAL_CACHE_BITS)-1
 
@@ -130,7 +130,7 @@ set_pc
 		and	cache_offset, #PC_CACHEOFFSET_MASK
 		mov	tagidx, ptrb
 		shr	tagidx, #PC_CACHELINE_BITS
-		and	tagidx, #PC_TAGIDX_MASK
+		and	tagidx, #L1_TAGIDX_MASK
 		
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		alts	tagidx, #l1tags	
@@ -498,6 +498,12 @@ imp_jalr
 Jmask		long	$fff00fff
 
 jal
+		cmp	rd, #0 wz 		    ' if no writeback, just do the jump
+	if_e	jmp	#skip_write
+		mov	immval, ptrb	' get return address
+		mov	dest, rd
+		call	#emit_mvi	' move into rd
+skip_write
 		mov	immval, opcode
 		sar	immval, #20	' sign extend, get some bits in place
 		and	immval, Jmask
@@ -509,16 +515,8 @@ jal
 		muxc	immval, ##(1<<11)
 		add	immval, ptrb	' calculate branch target
 		mov	cmp_flag, CONDMASK	    ' unconditional jump
-		cmp	rd, #0 wz 		    ' if no writeback, just do the jump
-	if_e	jmp	#issue_branch_cond
-		call	#emit_pc_immval_minus_4
-
-		mov	immval, ptrb	' get return address
-		mov	dest, rd
-		call	#emit_mvi	' move into rd
-		
-		wrlut	ret_instr, cacheptr
-	_ret_	add	cacheptr, #1
+ 		
+		jmp	#issue_branch_cond
 
 jalr
 		' set up offset in ptrb

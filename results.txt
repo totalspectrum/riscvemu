@@ -133,3 +133,9 @@ bigger cache
 dhry:    1588/sec (with -O3)
 xxtea: 58040
 fftbench: 56407
+
+latest 16 32 64
+
+dhry -O3:  1920/sec	1595/sec           1350
+xxtea:     68856	58024 cycles       61968 cycles
+fftbench:  70775	56403              50724

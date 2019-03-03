@@ -14,7 +14,6 @@
       7Fx - COG registers 1F0-1FF
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
-      BC2 - debug register; writing here dumps a checksum of memory
       C00 - cycle counter
 
    Theory of operation:
@@ -28,7 +27,6 @@
 }}
 
 '#define SPECIAL_DEBUG
-'#define DEBUG_TRACE
 #define ALWAYS
 
 CON
@@ -101,7 +99,6 @@ x15		jmp	#startup
 x16		long	0[16]
 		'' these registers must immediately follow x0-x31
 x32
-shadowpc	long	0
 opcode		long	0
 info1		long	0	' debug info
 info2		long	0	' debug info
@@ -109,11 +106,15 @@ info3		long	0
 info4		long	0
 memstart	long	BASE_OF_MEM
 memend		long	TOP_OF_MEM
-debug_trace	long	0
 
 cache_line_first_pc long 0
 l1tags		long	0[PC_NUMTAGS]
 
+rv_cache_data
+		long	0[PC_CACHELINE_LEN/4]
+rv_index
+		long	0
+		
 		'' now start execution
 startup
 		mov	temp,#15
@@ -131,11 +132,6 @@ set_pc
 		shr	tagidx, #PC_CACHELINE_BITS
 		and	tagidx, #PC_TAGIDX_MASK
 		
-#ifdef DEBUG_TRACE		
-		test	debug_trace, #1	wz
-	if_nz	call	#\debug_print
-#endif	
-
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		alts	tagidx, #l1tags	
 		mov	temp, tagidx
@@ -173,8 +169,16 @@ recompile
 		mov	cacheptr, ptrb
 		and	cacheptr, #TOTAL_CACHE_MASK
 		mov	cachecnt, #PC_CACHELINE_LEN/4
+
+		'' pull in the RiscV cache line
+		setq	#(PC_CACHELINE_LEN/4)-1
+		rdlong	rv_cache_data, ptrb
+		mov	rv_index, #0
 cachelp
-		rdlong	opcode, ptrb++
+		alts	rv_index, #rv_cache_data
+		mov	opcode, 0-0
+		add	ptrb, #4
+		add	rv_index, #1
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
   		call	#decodei
@@ -369,31 +373,8 @@ mul_templ
 ''     muxc	rd, #1
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 sltfunc
-		cmp	rd, #0	wz	' if rd == 0, emit nop
-	if_z	jmp	#\emit_nop
-	
-		andn	opdata, #$1ff	' zero out source
-		setd	sltfunc_pat, rd
-		setd	sltfunc_pat+1, rd
-		'' check for immediate
-		test	opcode, #$20 wz
-	if_nz	jmp	#slt_reg
-	
-		'' set up cmp with immediate here	
-		bith	opdata, #IMM_BITNUM
-		mov	dest, rs1
-		call	#emit_big_instr	' cmp rs1, ##immval
-		jmp	#slt_fini
-slt_reg
-		'' for reg<->reg, output cmp rs1, rs2
-		sets	opdata, rs2
-		setd	opdata, rs1
-		wrlut	opdata, cacheptr
-		add	cacheptr, #1
-slt_fini
-		mov	opptr, #sltfunc_pat
-		jmp	#emit2		' return from there to our caller
-		
+		jmp	#\hub_slt_func
+
 sltfunc_pat
 		mov	0-0, #0
 		muxc	0-0, #1
@@ -649,8 +630,12 @@ issue_branch_cond
 		or	opdata, immval
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
+#ifdef ALWAYS		
+		jmp	#emit_opdata_and_ret
+#else		
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
+#endif	
 absjump
 		jmp	#\0-0
 		
@@ -661,9 +646,12 @@ normal_branch
 		mov	opdata, ret_instr
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
+#ifdef ALWAYS
+		jmp	#emit_opdata_and_ret
+#else		
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
-
+#endif
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
@@ -807,9 +795,6 @@ uart_send_instr
 uart_recv_instr
 		call	#\ser_rx
 		mov	0-0, uartchar
-debugprint_instr
-		mov	debug_trace, 0-0
-		call	#\debug_print
 		
 '=========================================================================
 		'' VARIABLES
@@ -903,6 +888,32 @@ lui_aui_common
 		mov	dest, rd
 		jmp	#emit_mvi	'' return from there
 		
+hub_slt_func
+		cmp	rd, #0	wz	' if rd == 0, emit nop
+	if_z	jmp	#\emit_nop
+	
+		andn	opdata, #$1ff	' zero out source
+		setd	sltfunc_pat, rd
+		setd	sltfunc_pat+1, rd
+		'' check for immediate
+		test	opcode, #$20 wz
+	if_nz	jmp	#slt_reg
+	
+		'' set up cmp with immediate here	
+		bith	opdata, #IMM_BITNUM
+		mov	dest, rs1
+		call	#emit_big_instr	' cmp rs1, ##immval
+		jmp	#slt_fini
+slt_reg
+		'' for reg<->reg, output cmp rs1, rs2
+		sets	opdata, rs2
+		setd	opdata, rs1
+		wrlut	opdata, cacheptr
+		add	cacheptr, #1
+slt_fini
+		mov	opptr, #sltfunc_pat
+		jmp	#emit2		' return from there to our caller
+		
 
 compile_csrw
 		getnib	funct3, immval, #2
@@ -976,12 +987,6 @@ not_uart
 		jmp	#emit2		' return from there
 
 not_wait
-		cmp	immval, #$1C2 wz
-	if_nz	jmp	#not_debug
-		sets	debugprint_instr, rs1
-		mov	opptr, #debugprint_instr
-		jmp	#emit2
-not_debug
 		jmp	#illegalinstr
 
 		'' print single character in uartchar

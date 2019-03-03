@@ -37,7 +37,12 @@
 #include <stdio.h>
 #include <sys/time.h>
 
+#ifdef __FLEXC__
+#define getcyclespersec() (80000000)
+#else
+extern unsigned int getcyclespersec();
 #define printf iprintf
+#endif
 
 #ifdef _OPENMP
 // Only include omp if it is available
@@ -74,7 +79,6 @@ static void printSpectrum();
 // Return a timestamp in microsecond resolution.
 unsigned long time_us() {
     extern unsigned int getcnt();
-    extern unsigned int getcyclespersec();
     return getcnt() / (getcyclespersec()/1000000);
 }
 
@@ -323,6 +327,10 @@ void butterflies(int32_t* bx, int32_t* by, int32_t firstLevel, int32_t lastLevel
 }
 
 int main(int argc, char* argv[]) {
+#if defined(__FLEXC__) && defined(__P2__)
+    clkset(0x010007f8, 160000000);
+    _setbaud(230400);
+#endif
     fft_bench();
     return(0);
 }

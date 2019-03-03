@@ -40,7 +40,7 @@ CON
 }
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
-PC_CACHELINE_BITS = 4
+PC_CACHELINE_BITS = 5
 PC_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
 PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
@@ -111,6 +111,7 @@ memstart	long	BASE_OF_MEM
 memend		long	TOP_OF_MEM
 debug_trace	long	0
 
+cache_line_first_pc long 0
 l1tags		long	0[PC_NUMTAGS]
 
 		'' now start execution
@@ -168,6 +169,7 @@ recompile
 		'' now compile into cachebaseaddr in the LUT
 		'' the cache base address is formed from ptrb, which
 		'' is now pointing at the start of the HUB address
+		mov	cache_line_first_pc, ptrb
 		mov	cacheptr, ptrb
 		and	cacheptr, #TOTAL_CACHE_MASK
 		mov	cachecnt, #PC_CACHELINE_LEN/4
@@ -578,6 +580,11 @@ imp_jalr
 ''        cmp[s] rs1, rs2 wcz
 ''  if_z  loc ptrb, #\newpc
 ''  if_z  ret
+'' ** NOTE: if "newpc" is in the same cache line, we can
+'' change this to:
+''       cmp[s] rs1, rs2 wcz
+''  if_z  jmp #\cachepc
+''
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 cmps_instr	cmps	rs1, rs2 wcz
 cmp_instr	cmp	rs1, rs2 wcz
@@ -612,6 +619,7 @@ condbranch
 	if_nz	mov	cmp_flag, #%1100	' IF_C
 		test	funct3, #%001 wz
 	if_nz	xor	cmp_flag, #$f		' flip sense
+		shl	cmp_flag,#28		' get in high nibble
 		test	funct3, #%010 wz
 		'' write the compare instruction
 	if_z	mov	opdata,cmps_instr
@@ -630,10 +638,47 @@ condbranch
 		bitc	immval, #11
 		andn	immval, #1
 		add	immval, ptrb
-		call	#emit_pc_immval_minus_4
+		'' BEWARE! ptrb has stepped up by 4, so we need to
+		sub	immval, #4
+
+		'' see if the new pc is in the same cache line
+		'' subtract 4??
 		
+		mov    temp, immval
+		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
+		cmp    temp, #PC_CACHELINE_LEN wcz
+	if_ae	jmp    #normal_branch
+		
+		'' want to emit a conditional jump here
+#ifdef ALWAYS_NOT
+		'' debug code
+		'' print cache_line_start, oldpc, newpc
+		mov	 info1, cache_line_first_pc
+		call	 #ser_hex
+		mov	 info1, ptrb
+		call	 #ser_hex
+		mov	 info1, immval
+		call	 #ser_hex
+#endif		
+		mov	opdata, absjump
+		and	immval, #TOTAL_CACHE_MASK
+		add	immval, CACHE_START
+		or	opdata, immval
+		andn	opdata, CONDMASK
+		or	opdata, cmp_flag
+		wrlut	opdata, cacheptr
+#ifdef ALWAYS_NOT
+		mov	info1, opdata
+		call	#ser_hex
+		call	#ser_nl
+#endif		
+	_ret_	add	cacheptr, #1
+absjump
+		jmp	#\0-0
+		
+normal_branch
 		'' now write a conditional loc and ret
-		shl	cmp_flag,#28		' get in high nibble
+		call	#emit_pc_immval
 		call	#reset_compare_flag	' change conditional flag of last instruction
 		mov	opdata, ret_instr
 		andn	opdata, CONDMASK

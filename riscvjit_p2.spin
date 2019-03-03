@@ -38,7 +38,7 @@ CON
   we have 64 cache lines
 }
 ' bits per cache line
-PC_CACHELINE_BITS = 4
+PC_CACHELINE_BITS = 6
 PC_TAGIDX_BITS = (8-PC_CACHELINE_BITS)
 
 PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
@@ -46,8 +46,10 @@ PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
 ' given a pc, we calculate the offset within a cache line by "pc & PC_CACHEOFFSET_MASK"
 PC_CACHEOFFSET_MASK = (PC_CACHELINE_LEN-1)	' finds offset within cache line
 ' given a pc, we calculate the cache line number (tag index) by "(pc >> PC_CACHELINE_BITS) & PC_TAGIDX_MASK"
-PC_TAGIDX_MASK = ((1<<PC_TAGIDX_BITS)-1)
+PC_NUMTAGS = (1<<PC_TAGIDX_BITS)
+PC_TAGIDX_MASK = (PC_NUMTAGS-1)
 
+TOTAL_CACHE_MASK = $FF
 
 CON
   WC_BITNUM = 20
@@ -107,6 +109,8 @@ memstart	long	BASE_OF_MEM
 memend		long	TOP_OF_MEM
 debug_trace	long	0
 
+l1tags		long	0[PC_NUMTAGS]
+
 		'' now start execution
 startup
 		mov	temp,#15
@@ -117,7 +121,7 @@ startup
 		'' set the pc to ptrb
 set_pc
 		mov	cachepc, ptrb
-		and	cachepc, #$FF
+		and	cachepc, #TOTAL_CACHE_MASK
 		mov	cache_offset, ptrb
 		and	cache_offset, #PC_CACHEOFFSET_MASK
 		mov	tagidx, ptrb
@@ -129,9 +133,9 @@ set_pc
 	if_nz	call	#\debug_print
 #endif	
 
-		add	tagidx, #$100		' start of tag data
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
-		rdlut	temp, tagidx
+		alts	tagidx, #l1tags	
+		mov	temp, tagidx
 		cmp	ptrb, temp wz
 #ifdef SPECIAL_DEBUG
 		call	#recompile
@@ -155,9 +159,9 @@ set_pc
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 recompile
 		'' update the tag index
-		''wrlut	ptrb, tagidx	' this should work, but p2asm complains
-		mov	cacheptr, ptrb
-		wrlut	cacheptr, tagidx
+		'' ptrb must have been masked back to the start of the line
+		altd    tagidx, #l1tags
+		mov	0-0, ptrb
 
 		'' now compile into cachebaseaddr in the LUT
 		'' the cache base address is formed from ptrb, which

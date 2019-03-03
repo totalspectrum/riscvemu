@@ -28,6 +28,7 @@
 }}
 
 '#define SPECIAL_DEBUG
+'#define DEBUG_TRACE
 
 CON
   WC_BITNUM = 20
@@ -96,10 +97,11 @@ startup
 		'' set the pc to ptrb
 set_pc
 		andn	ptrb, #3		' ignore low bits of ptrb
+#ifdef DEBUG_TRACE		
 		test	debug_trace, #1	wz
 	if_nz	call	#\debug_print
+#endif	
 		getbyte	cachepc, ptrb, #0
-		andn	cachepc, #3    		''  FIXME debug check
 		getnib	tagidx, ptrb, #1
 		add	tagidx, #$100		' start of tag data
 		andn	ptrb, #$f     	     	' back ptrb up to start of line
@@ -116,8 +118,8 @@ set_pc
 		cmp	ptrb, ##$4770 wz
 	if_nz	jmp	#.skip_special
 		call	#dump_cache
-#endif		
 .skip_special
+#endif		
 		add	cachepc, CACHE_START
 		jmp	cachepc
 

@@ -118,3 +118,8 @@ xxtea:     59755 cycles
 fftbench:  60964 us
 dhry:       1119/sec (1561/sec with -O3)
 
+=====================================================
+New experiments:
+
+fftbench:  65435 us
+xxtea:     63732 cycles

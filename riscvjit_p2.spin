@@ -26,7 +26,6 @@
      we fall through everything is good.
 }}
 
-'#define SPECIAL_DEBUG
 #define ALWAYS
 
 CON
@@ -36,9 +35,18 @@ CON
     this translates to 16 bytes
   we have 64 cache lines
 }
+'#define DEBUG_CACHE
+
+
+#ifdef DEBUG_CACHE
+' bits per cache line
+TOTAL_CACHE_BITS = 5
+PC_CACHELINE_BITS = 4
+#else
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
-PC_CACHELINE_BITS = 5
+PC_CACHELINE_BITS = 7
+#endif
 L1_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
 PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
@@ -46,10 +54,16 @@ PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
 ' given a pc, we calculate the offset within a cache line by "pc & PC_CACHEOFFSET_MASK"
 PC_CACHEOFFSET_MASK = (PC_CACHELINE_LEN-1)	' finds offset within cache line
 ' given a pc, we calculate the cache line number (tag index) by "(pc >> PC_CACHELINE_BITS) & L1_TAGIDX_MASK"
-PC_NUMTAGS = (1<<L1_TAGIDX_BITS)
-L1_TAGIDX_MASK = (PC_NUMTAGS-1)
+NUM_L1_TAGS = (1<<L1_TAGIDX_BITS)
+L1_TAGIDX_MASK = (NUM_L1_TAGS-1)
 
 TOTAL_CACHE_MASK = (1<<TOTAL_CACHE_BITS)-1
+
+'' level 2 cache
+'' separate cache in HUB ram. let's make it hold about 64 cache lines
+L2_TAGIDX_BITS = 5
+NUM_L2_TAGS = (1<<L2_TAGIDX_BITS)
+L2_TAGIDX_MASK = (NUM_L2_TAGS-1)
 
 CON
   WC_BITNUM = 20
@@ -108,13 +122,8 @@ memstart	long	BASE_OF_MEM
 memend		long	TOP_OF_MEM
 
 cache_line_first_pc long 0
-l1tags		long	0[PC_NUMTAGS]
+l1tags		long	0[NUM_L1_TAGS]
 
-rv_cache_data
-		long	0[PC_CACHELINE_LEN/4]
-rv_index
-		long	0
-		
 		'' now start execution
 startup
 		mov	temp,#15
@@ -134,21 +143,11 @@ set_pc
 		
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		alts	tagidx, #l1tags	
-		mov	temp, tagidx
+		mov	temp, 0-0
 		cmp	ptrb, temp wz
-#ifdef SPECIAL_DEBUG
-		call	#recompile
-#else		
 	if_z	add	ptrb, #PC_CACHELINE_LEN	' skip to start of next line
 	if_nz	call	#recompile
-#endif	
 		push	#set_pc
-#ifdef SPECIAL_DEBUG
-		cmp	ptrb, ##$4770 wz
-	if_nz	jmp	#.skip_special
-		call	#dump_cache
-.skip_special
-#endif
 		add	cachepc, CACHE_START
 		jmp	cachepc
 
@@ -157,28 +156,59 @@ set_pc
 ' routine to compile the cache line starting at ptrb
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 recompile
-		'' update the tag index
+		'' update the L1 cache index
 		'' ptrb must have been masked back to the start of the line
 		altd    tagidx, #l1tags
 		mov	0-0, ptrb
 
-		'' now compile into cachebaseaddr in the LUT
-		'' the cache base address is formed from ptrb, which
-		'' is now pointing at the start of the HUB address
 		mov	cache_line_first_pc, ptrb
 		mov	cacheptr, ptrb
 		and	cacheptr, #TOTAL_CACHE_MASK
+
+		'' see if the code we need is in the L2 cache
+		mov    l2idx, ptrb
+		shr    l2idx, #PC_CACHELINE_BITS
+		and    l2idx, #L2_TAGIDX_MASK
+
+		mov    l2ptr, l2idx
+		shl    l2ptr, #2
+		add    l2ptr, l2tag_base_ptr
+		rdlong temp, l2ptr
+		
+		cmp    ptrb, temp wz
+	if_nz	jmp    #need_compile
+
+		setd   .rdcmd, cacheptr
+		'' read from the L2 cache
+		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
+		add	l2idx, l2_cache_base
+#ifdef DEBUG_CACHE
+		call	#l2_read_debug
+#endif		
+		setq2	#PC_CACHELINE_LEN-1
+.rdcmd
+		rdlong	0-0, l2idx
+#ifdef DEBUG_CACHE
+		setq2	#PC_CACHELINE_LEN-1
+		rdlong	cacheptr, #0
+		call	#dump_cache
+die2
+		jmp	#die2
+#endif		
+		add	ptrb, #PC_CACHELINE_LEN
+		ret
+		
+need_compile
+		wrlong	ptrb, l2ptr
+		mov	init_cacheptr, cacheptr
+		
+		'' now compile into cachebaseaddr in the LUT
+		'' the cache base address is formed from ptrb, which
+		'' is now pointing at the start of the HUB address
 		mov	cachecnt, #PC_CACHELINE_LEN/4
 
-		'' pull in the RiscV cache line
-		setq	#(PC_CACHELINE_LEN/4)-1
-		rdlong	rv_cache_data, ptrb
-		mov	rv_index, #0
 cachelp
-		alts	rv_index, #rv_cache_data
-		mov	opcode, 0-0
-		add	ptrb, #4
-		add	rv_index, #1
+		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
   		call	#decodei
@@ -205,8 +235,30 @@ pad_instructions
 
 		'' now set the last instructions EXEC flag to 0 (_ret_)
 finish_cache_line
+		setd	.wrcmd, init_cacheptr
 		mov	cmp_flag, #0
-		jmp	#reset_compare_flag
+		call	#reset_compare_flag
+		
+		'' write back to the L2 cache
+		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
+		add	l2idx, l2_cache_base
+		
+#ifdef DEBUG_CACHE
+		call	#ser_nl
+		mov	uartchar, #"W"
+		call	#ser_tx
+		mov	info1, cache_line_first_pc
+		call	#ser_hex
+		mov	info1, init_cacheptr
+		call	#ser_hex
+		mov	info1, l2idx
+		call	#ser_hex
+		call	#dump_cache
+#endif		
+		setq2	#PC_CACHELINE_LEN-1
+.wrcmd
+		wrlong	0-0, l2idx		' set to init_cacheptr
+		ret
 		
 do_illegalinstr
 		call	#illegalinstr
@@ -628,12 +680,7 @@ issue_branch_cond
 		or	opdata, immval
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
-#ifdef ALWAYS		
 		jmp	#emit_opdata_and_ret
-#else		
-		wrlut	opdata, cacheptr
-	_ret_	add	cacheptr, #1
-#endif	
 absjump
 		jmp	#\0-0
 		
@@ -644,12 +691,7 @@ normal_branch
 		mov	opdata, ret_instr
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
-#ifdef ALWAYS
 		jmp	#emit_opdata_and_ret
-#else		
-		wrlut	opdata, cacheptr
-	_ret_	add	cacheptr, #1
-#endif
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
@@ -809,12 +851,17 @@ divflags	long	0
 
 opptr		long	0
 cacheptr	long	0
+init_cacheptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
 cachepc		long	0
 cache_offset	long	0
-tagidx		long	0
+tagidx		long	0	' index into l1 cache
+l2idx		long	0	' index into l2 cache
+l2ptr		long	0
+l2tag_base_ptr	long	@@@l2_tags
 cachecnt	long	0
+l2_cache_base	long	$78000
 
 uartchar	long	0
 uartcnt		long	0
@@ -1106,17 +1153,6 @@ debug_print
 		mov	info1, ptrb
 		call	#ser_hex
 
-#ifdef SPECIAL_DEBUG
-		' special debug code
-		mov	uartchar, #"#"
-		call	#ser_tx
-		mov	info1, x11	' a1
-		call	#ser_hex
-		mov	uartchar, #"%"
-		call	#ser_tx
-		mov	info1, x8	' s0
-		call	#ser_hex
-#endif
 		loc	ptra, #\chksum_msg
 		call	#ser_str
 		ret
@@ -1134,39 +1170,44 @@ reg_buf
 		long 0[32]
 reg_buf_end
 
-#ifdef SPECIAL_DEBUG
-cache_msg
-		byte	"cache ptrb cachepc: ", 0
-dump_cache
-		loc	ptra, #cache_msg
-		call	#ser_str
+#ifdef DEBUG_CACHE
+l2_read_debug
+		call	#ser_nl
+		mov	uartchar, #"R"
+		call	#ser_tx
 		mov	info1, ptrb
 		call	#ser_hex
-		mov	info1, cachepc
+		mov	info1, cacheptr
 		call	#ser_hex
-		
-		mov	info3, #16
-		mov	info4, cachepc
-		andn	info4, #$f
-.dumplp
-		test	info4, #3 wz
-	if_nz	jmp	#.skip_nl
+		mov	info1, l2idx
+		call	#ser_hex
+		mov	info1, #PC_CACHELINE_LEN-1
+		call	#ser_hex
+		ret
+dump_cache
+		mov	pa, #0		' cache ptr
+		mov	info3, #(1<<TOTAL_CACHE_BITS)
+.dcache1
+		test	pa, #15 wz
+	if_z	call	#ser_nl
+		rdlut	info1, pa
+		add	pa, #1
+		call	#ser_hex
+		djnz	info3, #.dcache1
 		call	#ser_nl
-		mov	info1, info4
-		call	#ser_hex
-		mov	uartchar, #":"
-		call	#ser_tx
-.skip_nl
-		rdlut	info1, info4
-		call	#ser_hex
-		add	info4, #1
-		djnz	info3, #.dumplp
+		ret
 
-		jmp	#ser_nl
 #endif
+
 ser_nl
 		mov	uartchar, #13
 		call	#ser_tx
 		mov	uartchar, #10
 		call	#ser_tx
 		ret
+
+l2_tags
+		long	0[NUM_L2_TAGS]
+
+		orgh	$2000
+		

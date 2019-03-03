@@ -31,6 +31,25 @@
 '#define DEBUG_TRACE
 
 CON
+{
+  cache configuration
+  on the RiscV side, we have 4 instructions per cache line
+    this translates to 16 bytes
+  we have 64 cache lines
+}
+' bits per cache line
+PC_CACHELINE_BITS = 4
+PC_TAGIDX_BITS = (8-PC_CACHELINE_BITS)
+
+PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
+
+' given a pc, we calculate the offset within a cache line by "pc & PC_CACHEOFFSET_MASK"
+PC_CACHEOFFSET_MASK = (PC_CACHELINE_LEN-1)	' finds offset within cache line
+' given a pc, we calculate the cache line number (tag index) by "(pc >> PC_CACHELINE_BITS) & PC_TAGIDX_MASK"
+PC_TAGIDX_MASK = ((1<<PC_TAGIDX_BITS)-1)
+
+
+CON
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
@@ -39,17 +58,6 @@ CON
   RX_PIN = 63
   TX_PIN = 62
 
-  '' we extract the L1 tag index by shifting the byte address
-  '' and then masking
-  TAGIDX_SHIFT = 4
-  TAGIDX_MASK = $F
-  '' and the PC within the cache line by shifting and masking
-  '' there are two calculations we may have to make:
-  '' finding start of cache line for the RISCV PC
-  CACHEPC_P2_SHIFT = 0
-  CACHEPC_P2_MASK = $FF
-  CACHEPC_RV_MASK = $F
-  
   '' smart pin modes
   _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
   _rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
@@ -57,6 +65,7 @@ CON
   CYCLES_PER_SEC = 160_000_000
   CLOCK_MODE = $010007f8
   BAUD = 230_400
+  
   
 PUB start(params)
   coginit(0, @enter, 0)
@@ -108,11 +117,12 @@ startup
 		'' set the pc to ptrb
 set_pc
 		mov	cachepc, ptrb
+		and	cachepc, #$FF
+		mov	cache_offset, ptrb
+		and	cache_offset, #PC_CACHEOFFSET_MASK
 		mov	tagidx, ptrb
-		shr	tagidx, #TAGIDX_SHIFT
-		and	tagidx, #TAGIDX_MASK
-		shr	cachepc, #CACHEPC_P2_SHIFT
-		and	cachepc, #CACHEPC_P2_MASK
+		shr	tagidx, #PC_CACHELINE_BITS
+		and	tagidx, #PC_TAGIDX_MASK
 		
 #ifdef DEBUG_TRACE		
 		test	debug_trace, #1	wz
@@ -120,13 +130,13 @@ set_pc
 #endif	
 
 		add	tagidx, #$100		' start of tag data
-		andn	ptrb, #CACHEPC_RV_MASK   	     	' back ptrb up to start of line
+		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		rdlut	temp, tagidx
 		cmp	ptrb, temp wz
 #ifdef SPECIAL_DEBUG
 		call	#recompile
 #else		
-	if_z	add	ptrb, #16	' skip to start of next line
+	if_z	add	ptrb, #PC_CACHELINE_LEN	' skip to start of next line
 	if_nz	call	#recompile
 #endif	
 		push	#set_pc
@@ -135,7 +145,7 @@ set_pc
 	if_nz	jmp	#.skip_special
 		call	#dump_cache
 .skip_special
-#endif		
+#endif
 		add	cachepc, CACHE_START
 		jmp	cachepc
 
@@ -153,7 +163,7 @@ recompile
 		'' the cache base address is formed from ptrb, which
 		'' is now pointing at the start of the HUB address
 		getbyte	cacheptr, ptrb, #0
-		mov	cachecnt, #4
+		mov	cachecnt, #PC_CACHELINE_LEN/4
 cachelp
 		rdlong	opcode, ptrb
 		add	ptrb, #4
@@ -789,6 +799,7 @@ cacheptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
 cachepc		long	0
+cache_offset	long	0
 tagidx		long	0
 cachecnt	long	0
 

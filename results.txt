@@ -123,3 +123,9 @@ New experiments:
 
 fftbench:  65435 us
 xxtea:     63732 cycles
+
+
+STD cache:
+xxtea: 69176 cycles
+dry:    1129/sec
+

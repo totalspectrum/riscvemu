@@ -29,6 +29,7 @@
 
 '#define SPECIAL_DEBUG
 '#define DEBUG_TRACE
+#define ALWAYS
 
 CON
 {
@@ -38,7 +39,7 @@ CON
   we have 64 cache lines
 }
 ' bits per cache line
-TOTAL_CACHE_BITS = 8
+TOTAL_CACHE_BITS = 9
 PC_CACHELINE_BITS = 4
 PC_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 

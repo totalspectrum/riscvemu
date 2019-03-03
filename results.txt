@@ -129,3 +129,7 @@ STD cache:
 xxtea: 69176 cycles
 dry:    1129/sec
 
+bigger cache
+dhry:    1567/sec (with -O3)
+xxtea: 58424
+fftbench: 56415

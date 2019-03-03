@@ -58,7 +58,7 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $42000   ' 256K + 8K
+  TOP_OF_MEM = $78000   ' leaves 32K free at top
   RX_PIN = 63
   TX_PIN = 62
 
@@ -174,8 +174,7 @@ recompile
 		and	cacheptr, #TOTAL_CACHE_MASK
 		mov	cachecnt, #PC_CACHELINE_LEN/4
 cachelp
-		rdlong	opcode, ptrb
-		add	ptrb, #4
+		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
   		call	#decodei
@@ -495,17 +494,9 @@ decodei
 	_ret_	and	rd, #$1f
 		
 auipc
-		mov	immval, opcode
-		and	immval, LUI_MASK
-		add	immval, ptrb
-		sub	immval, #4
-		jmp	#lui_aui_common
+		jmp	#\hub_compile_auipc
 lui
-		mov	immval, opcode
-		and	immval, LUI_MASK
-lui_aui_common
-		mov	dest, rd
-		jmp	#emit_mvi	'' return from there
+		jmp	#\hub_compile_lui
 		
 LUI_MASK	long	$fffff000
 
@@ -536,6 +527,9 @@ jal
 		andn	immval, #1  	' clear low bit
 		muxc	immval, ##(1<<11)
 		add	immval, ptrb	' calculate branch target
+		mov	cmp_flag, CONDMASK	    ' unconditional jump
+		cmp	rd, #0 wz 		    ' if no writeback, just do the jump
+	if_e	jmp	#issue_branch_cond
 		call	#emit_pc_immval_minus_4
 
 		mov	immval, ptrb	' get return address
@@ -638,28 +632,17 @@ condbranch
 		bitc	immval, #11
 		andn	immval, #1
 		add	immval, ptrb
+issue_branch_cond		
 		'' BEWARE! ptrb has stepped up by 4, so we need to
+		'' adjust accordingly
 		sub	immval, #4
 
-		'' see if the new pc is in the same cache line
-		'' subtract 4??
-		
 		mov    temp, immval
 		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
 		cmp    temp, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    #normal_branch
 		
 		'' want to emit a conditional jump here
-#ifdef ALWAYS_NOT
-		'' debug code
-		'' print cache_line_start, oldpc, newpc
-		mov	 info1, cache_line_first_pc
-		call	 #ser_hex
-		mov	 info1, ptrb
-		call	 #ser_hex
-		mov	 info1, immval
-		call	 #ser_hex
-#endif		
 		mov	opdata, absjump
 		and	immval, #TOTAL_CACHE_MASK
 		add	immval, CACHE_START
@@ -667,11 +650,6 @@ condbranch
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		wrlut	opdata, cacheptr
-#ifdef ALWAYS_NOT
-		mov	info1, opdata
-		call	#ser_hex
-		call	#ser_nl
-#endif		
 	_ret_	add	cacheptr, #1
 absjump
 		jmp	#\0-0
@@ -911,6 +889,20 @@ end_of_tables
 ''
 
 		orgh $800
+
+hub_compile_auipc
+		mov	immval, opcode
+		and	immval, LUI_MASK
+		add	immval, ptrb
+		sub	immval, #4
+		jmp	#lui_aui_common
+hub_compile_lui
+		mov	immval, opcode
+		and	immval, LUI_MASK
+lui_aui_common
+		mov	dest, rd
+		jmp	#emit_mvi	'' return from there
+		
 
 compile_csrw
 		getnib	funct3, immval, #2

@@ -38,8 +38,9 @@ CON
   we have 64 cache lines
 }
 ' bits per cache line
-PC_CACHELINE_BITS = 6
-PC_TAGIDX_BITS = (8-PC_CACHELINE_BITS)
+TOTAL_CACHE_BITS = 8
+PC_CACHELINE_BITS = 4
+PC_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
 PC_CACHELINE_LEN = (1<<PC_CACHELINE_BITS)
 
@@ -49,7 +50,7 @@ PC_CACHEOFFSET_MASK = (PC_CACHELINE_LEN-1)	' finds offset within cache line
 PC_NUMTAGS = (1<<PC_TAGIDX_BITS)
 PC_TAGIDX_MASK = (PC_NUMTAGS-1)
 
-TOTAL_CACHE_MASK = $FF
+TOTAL_CACHE_MASK = (1<<TOTAL_CACHE_BITS)-1
 
 CON
   WC_BITNUM = 20
@@ -166,7 +167,8 @@ recompile
 		'' now compile into cachebaseaddr in the LUT
 		'' the cache base address is formed from ptrb, which
 		'' is now pointing at the start of the HUB address
-		getbyte	cacheptr, ptrb, #0
+		mov	cacheptr, ptrb
+		and	cacheptr, #TOTAL_CACHE_MASK
 		mov	cachecnt, #PC_CACHELINE_LEN/4
 cachelp
 		rdlong	opcode, ptrb

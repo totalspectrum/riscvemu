@@ -27,12 +27,14 @@ int main(int argc, char* argv[])
     clock_t start, end;
     int i;
     iprintf("xxtea test: press 'a' to begin\n");
+#if 0    
     for(;;) {
         i = getbyte();
         if (i < 0) continue;
         iprintf("got: `%c'\n", i);
         if (i == 'a') break;
     }
+#endif    
     iprintf("starting...\n");
     start = getcnt();
     btea (testVector, -blockSize, (uint32_t*) key);

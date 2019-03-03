@@ -38,6 +38,17 @@ CON
   TOP_OF_MEM = $42000   ' 256K + 8K
   RX_PIN = 63
   TX_PIN = 62
+
+  '' we extract the L1 tag index by shifting the byte address
+  '' and then masking
+  TAGIDX_SHIFT = 4
+  TAGIDX_MASK = $F
+  '' and the PC within the cache line by shifting and masking
+  '' there are two calculations we may have to make:
+  '' finding start of cache line for the RISCV PC
+  CACHEPC_P2_SHIFT = 0
+  CACHEPC_P2_MASK = $FF
+  CACHEPC_RV_MASK = $F
   
   '' smart pin modes
   _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
@@ -96,15 +107,20 @@ startup
 
 		'' set the pc to ptrb
 set_pc
-		andn	ptrb, #3		' ignore low bits of ptrb
+		mov	cachepc, ptrb
+		mov	tagidx, ptrb
+		shr	tagidx, #TAGIDX_SHIFT
+		and	tagidx, #TAGIDX_MASK
+		shr	cachepc, #CACHEPC_P2_SHIFT
+		and	cachepc, #CACHEPC_P2_MASK
+		
 #ifdef DEBUG_TRACE		
 		test	debug_trace, #1	wz
 	if_nz	call	#\debug_print
 #endif	
-		getbyte	cachepc, ptrb, #0
-		getnib	tagidx, ptrb, #1
+
 		add	tagidx, #$100		' start of tag data
-		andn	ptrb, #$f     	     	' back ptrb up to start of line
+		andn	ptrb, #CACHEPC_RV_MASK   	     	' back ptrb up to start of line
 		rdlut	temp, tagidx
 		cmp	ptrb, temp wz
 #ifdef SPECIAL_DEBUG

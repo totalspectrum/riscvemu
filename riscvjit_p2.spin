@@ -355,7 +355,8 @@ reg_imm
 		' and with dest being the result
 		'
 		mov	dest, rd
-		call	#emit_mov_rd_rs1
+		cmp	rd, rs1 wz
+	if_nz	call	#emit_mov_rd_rs1
 		jmp	#emit_big_instr
 
 		'
@@ -377,26 +378,24 @@ reg_reg
 	if_c	mov	opdata, subdata
 nosub
 		'
-		' if rd matches rs2, move rd out of the way
+		' if rd is not the same as rs1, we have
+		' to issue an ALTR 0, #rd
 		'
-		cmp	rd, rs2 wz
-	if_nz	jmp	#notemp
-		sets	mov_temp_op, rd
-		wrlut	mov_temp_op, cacheptr
+		cmp	rd, rs1 wz
+	if_z	jmp	#noaltr
+		sets	altr_op, rd
+		wrlut	altr_op, cacheptr
 		add	cacheptr, #1
-		mov	rs2, #temp
-
-notemp
-		call	#emit_mov_rd_rs1
+noaltr
 		'' now do the operation
 		sets	opdata, rs2
-		setd  	opdata, rd
+		setd  	opdata, rs1
 emit_opdata_and_ret
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
 
-mov_temp_op
-		mov	temp, 0-0
+altr_op
+		altr	x0, #0-0
 
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' for multiply and divide we just generate
@@ -471,6 +470,11 @@ loadop
 		cmp	rd, #0	wz	' if rd == 0, emit nop
 	if_z	jmp	#emit_nop
 ldst_common
+		cmp	immval, #0 wz
+	if_nz	jmp	#full_ldst_imm
+		mov	dest, rs1
+		jmp	#final_ldst
+	full_ldst_imm
 		and	immval, AUGPTR_MASK
 		andn	locptra, AUGPTR_MASK
 		or	locptra, immval
@@ -478,6 +482,8 @@ ldst_common
 		mov	opptr, #locptra
 		call	#emit2
 
+		mov	dest, #ptra	' use ptra for address
+final_ldst
 		'' now the actual rd/wr instruction
 		'' opdata contains a template like
 		''   rdword SIGNWORD, loadop wc
@@ -487,7 +493,7 @@ ldst_common
 		and	signmask, #$1ff wz ' remember if there is a sign mask
 		'' now change the opdata to look like
 		''   rdword rd, ptra
-		sets	opdata, #ptra
+		sets	opdata, dest
 		setd	opdata, rd
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1

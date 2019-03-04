@@ -156,7 +156,7 @@ dhry -O3: 10471
 xxtea; 54816
 fftbench: 50242
 
-faster cache code
-dhry -O3: 10976
-xxtea:    36632
-fftbench: 41989
+faster cache code 128 / 64 byte lines
+dhry -O3: 10976  / 11363
+xxtea:    36632  / 47124
+fftbench: 41989  / 44590

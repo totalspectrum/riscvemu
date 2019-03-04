@@ -40,7 +40,7 @@ CON
 
 #ifdef DEBUG_CACHE
 ' bits per cache line
-TOTAL_CACHE_BITS = 5
+TOTAL_CACHE_BITS = 6
 PC_CACHELINE_BITS = 4
 #else
 ' bits per cache line
@@ -142,6 +142,7 @@ set_pc
 		and	cachepc, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		mov	cache_offset, ptrb
 		and	cache_offset, #PC_CACHEOFFSET_MASK
+		shr	cache_offset, #2
 		add	cachepc, cache_offset
 		mov	tagidx, ptrb
 		shr	tagidx, #PC_CACHELINE_BITS
@@ -196,12 +197,10 @@ recompile
 		setq2	#PC_CACHELINE_LEN-1
 .rdcmd
 		rdlong	0-0, l2idx
-#ifdef DEBUG_CACHE
+#ifdef DEBUG_CACHE_DUMP
 		setq2	#PC_CACHELINE_LEN-1
 		rdlong	cacheptr, #0
 		call	#dump_cache
-die2
-		jmp	#die2
 #endif		
 		add	ptrb, #PC_CACHELINE_LEN
 		ret
@@ -267,16 +266,7 @@ finish_cache_line
 		add	l2idx, l2_cache_base
 		
 #ifdef DEBUG_CACHE
-		call	#ser_nl
-		mov	uartchar, #"W"
-		call	#ser_tx
-		mov	info1, cache_line_first_pc
-		call	#ser_hex
-		mov	info1, init_cacheptr
-		call	#ser_hex
-		mov	info1, l2idx
-		call	#ser_hex
-		call	#dump_cache
+		call	#l2_write_debug
 #endif
 
 		'' setq2 + wrlong writes multiple words from LUT to HUB
@@ -1233,6 +1223,8 @@ l2_read_debug
 		call	#ser_tx
 		mov	info1, ptrb
 		call	#ser_hex
+		mov	info1, cachepc
+		call	#ser_hex
 		mov	info1, cacheptr
 		call	#ser_hex
 		mov	info1, l2idx
@@ -1253,6 +1245,19 @@ dump_cache
 		call	#ser_nl
 		ret
 
+l2_write_debug
+		call	#ser_nl
+		mov	uartchar, #"W"
+		call	#ser_tx
+		mov	info1, cache_line_first_pc
+		call	#ser_hex
+		mov	info1, cachepc
+		call	#ser_hex
+		mov	info1, init_cacheptr
+		call	#ser_hex
+		mov	info1, l2idx
+		call	#ser_hex
+		call	#dump_cache
 #endif
 
 ser_nl

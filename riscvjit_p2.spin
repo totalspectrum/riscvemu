@@ -35,7 +35,7 @@ CON
     this translates to 16 bytes
   we have 64 cache lines
 }
-'#define DEBUG_CACHE
+#define DEBUG_CACHE
 
 
 #ifdef DEBUG_CACHE
@@ -128,17 +128,21 @@ l1tags		long	0[NUM_L1_TAGS]
 
 		'' now start execution
 startup
-		mov	temp,#15
-.lp		altd	temp, #x2
-		mov	0-0, #0
-		djnz	temp, #.lp
-
-		'' set the pc to ptrb
+''
+'' set the pc to ptrb
+'' this is the main loop, basically; it's entered with
+'' ptrb holding the address we want for the pc. We check
+'' to see if that's in L1 cache, and if it is then we just jump
+'' into the cache in LUT. Otherwise we go to do_recompile, which
+'' checks the L2 cache and if it's not in there compiles the
+'' cache line at ptrb
+''
 set_pc
 		mov	cachepc, ptrb
-		and	cachepc, #TOTAL_CACHE_MASK
+		and	cachepc, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		mov	cache_offset, ptrb
 		and	cache_offset, #PC_CACHEOFFSET_MASK
+		add	cachepc, cache_offset
 		mov	tagidx, ptrb
 		shr	tagidx, #PC_CACHELINE_BITS
 		and	tagidx, #L1_TAGIDX_MASK
@@ -156,6 +160,8 @@ set_pc
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' routine to compile the cache line starting at ptrb
+' checks for code in the L2 cache first; if it is in
+' there then loads it
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 recompile
 		'' update the L1 cache index
@@ -204,12 +210,26 @@ need_compile
 		wrlong	ptrb, l2ptr
 		mov	init_cacheptr, cacheptr
 		
-		'' now compile into cachebaseaddr in the LUT
-		'' the cache base address is formed from ptrb, which
-		'' is now pointing at the start of the HUB address
+		'' now compile into cacheptr in the LUT
+		'' ptrb is pointing at the start of the HUB cache line
 		mov	cachecnt, #PC_CACHELINE_LEN/4
 
+		'' first thing in the cache line is a jump table
+		'' 1 for each instruction, which lets us jump into
+		'' the middle of the cache line
+		'' we build that as we go, so just skip cacheptr over it
+		'' for now
+		mov    jmptabptr, cacheptr
+		add    cacheptr, cachecnt
 cachelp
+		'' update the jump table
+		mov	opdata, absjump
+		or	opdata, cacheptr
+		or	opdata, CACHE_START
+		wrlut	opdata, jmptabptr
+		add	jmptabptr, #1
+
+		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
@@ -227,17 +247,13 @@ getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
 		call	temp			' compile the instruction
-pad_instructions
-		'' pad the instruction translation to a multiple of 4
-		test	cacheptr, #3 wz
-	if_nz	call	#emit_nop
-	if_nz	jmp	#pad_instructions
+done_instruction
 		djnz	cachecnt, #cachelp
+		
 		'' finish the cache line
-
 		'' now set the last instructions EXEC flag to 0 (_ret_)
 finish_cache_line
-		setd	.wrcmd, init_cacheptr
+		setd	.l2wrcmd, init_cacheptr ' prepare for eventual copy to L2 cache
 		mov	cmp_flag, #0
 		call	#reset_compare_flag
 		
@@ -256,15 +272,17 @@ finish_cache_line
 		mov	info1, l2idx
 		call	#ser_hex
 		call	#dump_cache
-#endif		
+#endif
+
+		'' setq2 + wrlong writes multiple words from LUT to HUB
 		setq2	#PC_CACHELINE_LEN-1
-.wrcmd
+.l2wrcmd
 		wrlong	0-0, l2idx		' set to init_cacheptr
 		ret
 		
 do_illegalinstr
 		call	#illegalinstr
-		jmp	#pad_instructions
+		jmp	#done_instruction
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
 ' if the upper 4 bits of the entry is 0, the entry is
@@ -674,7 +692,10 @@ issue_branch_cond
 		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
 		cmp    temp, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    #normal_branch
-		
+#ifdef ALWAYS
+		jmp	#normal_branch
+#else
+		'' FIXME need to redo this
 		'' want to emit a conditional jump here
 		mov	opdata, absjump
 		and	immval, #TOTAL_CACHE_MASK
@@ -683,6 +704,7 @@ issue_branch_cond
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
+#endif		
 absjump
 		jmp	#\0-0
 		
@@ -854,6 +876,7 @@ divflags	long	0
 opptr		long	0
 cacheptr	long	0
 init_cacheptr	long	0
+jmptabptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
 cachepc		long	0

@@ -362,6 +362,12 @@ nosar
 	if_nz	jmp	#reg_reg
 		bith	opdata, #IMM_BITNUM
 
+		' special case: addi xa, x0, N
+		' can be translated as mv x0, N
+		' we can tell it's an add because it will have WZ_BITNUM set
+		testb	opdata, #WZ_BITNUM wc
+	if_c	jmp	#hub_addi
+reg_imm
 		'
 		' emit an immediate instruction with optional large prefix
 		' and with dest being the result
@@ -928,6 +934,19 @@ end_of_tables
 ''
 
 		orgh $800
+		'
+		' handle addi instruction specially
+		' if we get addi R, x0, N
+		' we emit mov R, #N instead
+		' similarly addi R, N, 0
+		' can become mov R, N
+hub_addi
+		cmp	immval, #0 wz
+	if_z	jmp	#emit_mov_rd_rs1
+		cmp	rs1, #x0 wz
+	if_nz	jmp	#reg_imm
+		jmp	#emit_mvi
+		
 hub_condbranch		
 		test	funct3, #%100 wz
 	if_z	mov	cmp_flag, #%1010	' IF_Z

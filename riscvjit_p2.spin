@@ -670,21 +670,22 @@ issue_branch_cond
 		'' adjust accordingly
 		sub	immval, #4
 
-		mov    temp, immval
-		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
-		cmp    temp, #PC_CACHELINE_LEN wcz
-	if_ae	jmp    #normal_branch
-#ifndef ALWAYS
-		'' FIXME need to redo this
+		mov	cache_offset, immval
+		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
+		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
+	if_ae	jmp    	#normal_branch
+
+		shr	cache_offset, #2
 		'' want to emit a conditional jump here
 		mov	opdata, absjump
-		and	immval, #TOTAL_CACHE_MASK
+		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		add	immval, CACHE_START
+		add	immval, cache_offset
 		or	opdata, immval
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
-#endif		
+
 
 normal_branch
 		'' now write a conditional loc and ret

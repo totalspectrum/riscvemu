@@ -250,9 +250,18 @@ done_instruction
 		djnz	cachecnt, #cachelp
 		
 		'' finish the cache line
-		'' now set the last instructions EXEC flag to 0 (_ret_)
 finish_cache_line
 		setd	.l2wrcmd, init_cacheptr ' prepare for eventual copy to L2 cache
+
+		'' we may need to add a nop if previous instruction has a nonzero EXEC flag
+		sub	cacheptr, #1
+		rdlut	opdata, cacheptr
+		add	cacheptr, #1
+		xor	opdata, CONDMASK
+		test	opdata, CONDMASK wz	' are upper bits all 1's
+	if_nz	call	#emit_nop
+	
+		'' now set the last instructions EXEC flag to 0 (_ret_)
 		mov	cmp_flag, #0
 		call	#reset_compare_flag
 		
@@ -679,7 +688,6 @@ issue_branch_cond
 		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
 		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    	#normal_branch
-
 		shr	cache_offset, #2
 		'' want to emit a conditional jump here
 		mov	opdata, absjump

@@ -478,6 +478,11 @@ loadop
 		cmp	rd, #0	wz	' if rd == 0, emit nop
 	if_z	jmp	#emit_nop
 ldst_common
+		cmp	immval, #0 wz
+	if_nz	jmp	#full_ldst_imm
+		mov	dest, rs1
+		jmp	#final_ldst
+full_ldst_imm
 		and	immval, AUGPTR_MASK
 		andn	locptra, AUGPTR_MASK
 		or	locptra, immval
@@ -485,6 +490,8 @@ ldst_common
 		mov	opptr, #locptra
 		call	#emit2
 
+		mov	dest, #ptra	' use ptra for address
+final_ldst
 		'' now the actual rd/wr instruction
 		'' opdata contains a template like
 		''   rdword SIGNWORD, loadop wc
@@ -494,7 +501,7 @@ ldst_common
 		and	signmask, #$1ff wz ' remember if there is a sign mask
 		'' now change the opdata to look like
 		''   rdword rd, ptra
-		sets	opdata, #ptra
+		sets	opdata, dest
 		setd	opdata, rd
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1

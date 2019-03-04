@@ -35,12 +35,12 @@ CON
     this translates to 16 bytes
   we have 64 cache lines
 }
-#define DEBUG_CACHE
+'#define DEBUG_CACHE
 
 
 #ifdef DEBUG_CACHE
 ' bits per cache line
-TOTAL_CACHE_BITS = 6
+TOTAL_CACHE_BITS = 5
 PC_CACHELINE_BITS = 4
 #else
 ' bits per cache line
@@ -363,7 +363,8 @@ reg_imm
 		' and with dest being the result
 		'
 		mov	dest, rd
-		call	#emit_mov_rd_rs1
+		cmp	rd, rs1 wz
+	if_nz	call	#emit_mov_rd_rs1
 		jmp	#emit_big_instr
 
 		'
@@ -935,6 +936,7 @@ hub_addi
 	if_z	jmp	#emit_mov_rd_rs1
 		cmp	rs1, #x0 wz
 	if_nz	jmp	#reg_imm
+		mov	dest, rd
 		jmp	#emit_mvi
 		
 hub_condbranch		

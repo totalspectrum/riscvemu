@@ -724,8 +724,13 @@ emit1
 ' emit code to copy the 32 bit immediate value in immval into
 ' the register pointed to by "dest"
 mvins 	      	mov     0-0,#0
+negins		neg	0-0,#0
+
 emit_mvi
-		mov	opdata, mvins
+		cmp	immval, #0 wcz
+	if_b	mov	opdata, negins
+	if_b	neg	immval
+	if_ae	mov	opdata, mvins
 emit_big_instr
 		mov	big_temp_0+1,opdata
 		cmp	dest, #x0 wz
@@ -933,12 +938,18 @@ end_of_tables
 		' similarly addi R, N, 0
 		' can become mov R, N
 hub_addi
-		cmp	immval, #0 wz
+		cmp	immval, #0 wcz
 	if_z	jmp	#emit_mov_rd_rs1
 		cmp	rs1, #x0 wz
-	if_nz	jmp	#reg_imm
-		mov	dest, rd
-		jmp	#emit_mvi
+	if_z	mov	dest, rd
+	if_z	jmp	#emit_mvi
+		' convert addi A, B, -N to sub A, B, N
+		cmp	immval, #0 wcz
+	if_ae	jmp	#reg_imm
+		neg	immval
+		mov	opdata, subdata
+		bith	opdata, #IMM_BITNUM
+		jmp	#reg_imm
 		
 hub_condbranch		
 		test	funct3, #%100 wz

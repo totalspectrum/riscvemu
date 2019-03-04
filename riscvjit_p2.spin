@@ -657,31 +657,11 @@ reset_compare_flag
 		wrlut	temp, cacheptr
 	_ret_	add	cacheptr, #1
 
+absjump
+		jmp	#\0-0
+		
 condbranch
-		test	funct3, #%100 wz
-	if_z	mov	cmp_flag, #%1010	' IF_Z
-	if_nz	mov	cmp_flag, #%1100	' IF_C
-		test	funct3, #%001 wz
-	if_nz	xor	cmp_flag, #$f		' flip sense
-		shl	cmp_flag,#28		' get in high nibble
-		test	funct3, #%010 wz
-		'' write the compare instruction
-	if_z	mov	opdata,cmps_instr
-	if_nz	mov	opdata, cmp_instr
-		setd	opdata, rs1
-		sets	opdata, rs2
-		wrlut	opdata, cacheptr
-		add	cacheptr, #1
-
-		'' now we need to calculate the new pc
-		'' this means re-arranging some bits
-		'' in immval
-		andn 	immval, #$1f
-		or	immval, rd
-		test  	immval, #1 wc
-		bitc	immval, #11
-		andn	immval, #1
-		add	immval, ptrb
+		jmp	#hub_condbranch
 issue_branch_cond		
 		'' BEWARE! ptrb has stepped up by 4, so we need to
 		'' adjust accordingly
@@ -700,8 +680,6 @@ issue_branch_cond
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
-absjump
-		jmp	#\0-0
 		
 normal_branch
 		'' now write a conditional loc and ret
@@ -740,8 +718,13 @@ emit1
 ' emit code to copy the 32 bit immediate value in immval into
 ' the register pointed to by "dest"
 mvins 	      	mov     0-0,#0
+negins		neg	0-0,#0
+
 emit_mvi
-		mov	opdata, mvins
+		cmp	immval, #0 wcz
+	if_b	mov	opdata, negins
+	if_b	neg	immval
+	if_ae	mov	opdata, mvins
 emit_big_instr
 		mov	big_temp_0+1,opdata
 		cmp	dest, #x0 wz
@@ -952,15 +935,46 @@ end_of_tables
 	       ' can become sub R, A, N
 	       ' (we haven't done the last one yet
 hub_addi
-               cmp	immval, #0 wz
+               cmp	immval, #0 wcz
        if_z    jmp     	#emit_mov_rd_rs1
-#ifdef ALWAYS
                cmp     	rs1, #x0 wz
        if_z    mov	dest, rd
        if_z    jmp     	#emit_mvi
-#endif       
-               jmp	#reg_imm
+		' convert addi A, B, -N to sub A, B, N
+		cmp	immval, #0 wcz
+	if_ae	jmp	#reg_imm
+		neg	immval
+		mov	opdata, subdata
+		bith	opdata, #IMM_BITNUM
+		jmp	#reg_imm
 
+hub_condbranch		
+		test	funct3, #%100 wz
+	if_z	mov	cmp_flag, #%1010	' IF_Z
+	if_nz	mov	cmp_flag, #%1100	' IF_C
+		test	funct3, #%001 wz
+	if_nz	xor	cmp_flag, #$f		' flip sense
+		shl	cmp_flag,#28		' get in high nibble
+		test	funct3, #%010 wz
+		'' write the compare instruction
+	if_z	mov	opdata,cmps_instr
+	if_nz	mov	opdata, cmp_instr
+		setd	opdata, rs1
+		sets	opdata, rs2
+		wrlut	opdata, cacheptr
+		add	cacheptr, #1
+
+		'' now we need to calculate the new pc
+		'' this means re-arranging some bits
+		'' in immval
+		andn 	immval, #$1f
+		or	immval, rd
+		test  	immval, #1 wc
+		bitc	immval, #11
+		andn	immval, #1
+		add	immval, ptrb
+		jmp	#issue_branch_cond
+		
 hub_compile_auipc
 		mov	immval, opcode
 		and	immval, LUI_MASK
@@ -1200,7 +1214,7 @@ debug_print
 		call	#ser_str
 		ret
 boot_msg
-		byte	"RiscV P2 JIT", 10, 0
+		byte	"RiscV P2 JIT", 13, 10, 0
 chksum_msg
 		byte    "=memory chksum", 10, 0
 illegal_instruction_msg

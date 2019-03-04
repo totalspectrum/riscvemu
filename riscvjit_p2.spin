@@ -257,6 +257,11 @@ finish_cache_line
 		mov	cmp_flag, #0
 		call	#reset_compare_flag
 		
+		'' sanity check that we haven't gone over the cache line
+		sub	cacheptr, init_cacheptr
+		cmp	cacheptr, #PC_CACHELINE_LEN wcz
+	if_a	jmp	#internal_error
+	
 		'' write back to the L2 cache
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
 		add	l2idx, l2_cache_base
@@ -658,6 +663,9 @@ reset_compare_flag
 		wrlut	temp, cacheptr
 	_ret_	add	cacheptr, #1
 
+absjump
+		jmp	#\0-0
+		
 condbranch
 		test	funct3, #%100 wz
 	if_z	mov	cmp_flag, #%1010	' IF_Z
@@ -692,9 +700,7 @@ issue_branch_cond
 		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
 		cmp    temp, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    #normal_branch
-#ifdef ALWAYS
-		jmp	#normal_branch
-#else
+#ifndef ALWAYS
 		'' FIXME need to redo this
 		'' want to emit a conditional jump here
 		mov	opdata, absjump
@@ -705,9 +711,7 @@ issue_branch_cond
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
 #endif		
-absjump
-		jmp	#\0-0
-		
+
 normal_branch
 		'' now write a conditional loc and ret
 		call	#emit_pc_immval
@@ -759,7 +763,10 @@ emit_big_instr
 		sets	big_temp_0+1, immval
 		setd	big_temp_0+1, dest
 		mov	opptr, #big_temp_0
-		jmp	#emit2
+		'' if the augment bits are 0, skip them
+        if_z	jmp	#emit2
+		add	opptr, #1
+		jmp	#emit1
 big_temp_0
 		mov	0-0, ##0-0
 
@@ -944,7 +951,7 @@ end_of_tables
 ''
 
 		orgh $800
-
+hub_condbranch		
 hub_compile_auipc
 		mov	immval, opcode
 		and	immval, LUI_MASK
@@ -1232,6 +1239,15 @@ ser_nl
 		mov	uartchar, #10
 		call	#ser_tx
 		ret
+internal_error
+		mov	info1, ptrb
+		sub	info1, #PC_CACHELINE_LEN
+		call	#ser_hex
+		mov	info1, cacheptr
+		call	#ser_hex
+		loc	ptra, #cache_error_msg
+		call	#ser_str
+.die		jmp	#.die
 
 l2_tags
 		long	0[NUM_L2_TAGS]

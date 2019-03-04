@@ -128,12 +128,16 @@ l1tags		long	0[NUM_L1_TAGS]
 
 		'' now start execution
 startup
-		mov	temp,#15
-.lp		altd	temp, #x2
-		mov	0-0, #0
-		djnz	temp, #.lp
 
-		'' set the pc to ptrb
+''
+'' set the pc to ptrb
+'' this is the main loop, basically; it's entered with
+'' ptrb holding the address we want for the pc. We check
+'' to see if that's in L1 cache, and if it is then we just jump
+'' into the cache in LUT. Otherwise we go to do_recompile, which
+'' checks the L2 cache and if it's not in there compiles the
+'' cache line at ptrb
+''
 set_pc
 		mov	cachepc, ptrb
 		and	cachepc, #TOTAL_CACHE_MASK
@@ -339,6 +343,13 @@ nosar
 	if_nz	jmp	#reg_reg
 		bith	opdata, #IMM_BITNUM
 
+               ' special case: addi xa, x0, N
+               ' can be translated as mv x0, N
+               ' we can tell it's an add because it will have WZ_BITNUM set
+               testb   opdata, #WZ_BITNUM wc
+       if_c    jmp     #hub_addi
+
+reg_imm
 		'
 		' emit an immediate instruction with optional large prefix
 		' and with dest being the result
@@ -737,7 +748,11 @@ emit_big_instr
 		sets	big_temp_0+1, immval
 		setd	big_temp_0+1, dest
 		mov	opptr, #big_temp_0
-		jmp	#emit2
+		'' if the augment bits are nonzero, emit augment
+	if_nz	jmp	#emit2
+		'' otherwise skip the augment part
+		add	opptr, #1
+		jmp	#emit1
 big_temp_0
 		mov	0-0, ##0-0
 
@@ -921,6 +936,24 @@ end_of_tables
 ''
 
 		orgh $800
+               '
+               ' handle addi instruction specially
+               ' if we get addi R, x0, N
+               ' we emit mov R, #N instead
+               ' similarly addi R, N, 0
+               ' can become mov R, N
+	       ' and add R, A, -N
+	       ' can become sub R, A, N
+	       ' (we haven't done the last one yet
+hub_addi
+               cmp	immval, #0 wz
+       if_z    jmp     	#emit_mov_rd_rs1
+#ifdef ALWAYS
+               cmp     	rs1, #x0 wz
+       if_z    mov	dest, rd
+       if_z    jmp     	#emit_mvi
+#endif       
+               jmp	#reg_imm
 
 hub_compile_auipc
 		mov	immval, opcode

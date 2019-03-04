@@ -60,8 +60,10 @@ L1_TAGIDX_MASK = (NUM_L1_TAGS-1)
 TOTAL_CACHE_MASK = (1<<TOTAL_CACHE_BITS)-1
 
 '' level 2 cache
-'' separate cache in HUB ram. let's make it hold about 64 cache lines
-L2_TAGIDX_BITS = 5
+'' separate cache in HUB ram. The top part of HUB is locked, so we can
+'' only go up to about 8K??
+L2_CACHE_SIZE_BITS=13
+L2_TAGIDX_BITS = (L2_CACHE_SIZE_BITS-PC_CACHELINE_BITS)
 NUM_L2_TAGS = (1<<L2_TAGIDX_BITS)
 L2_TAGIDX_MASK = (NUM_L2_TAGS-1)
 
@@ -70,7 +72,7 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $78000   ' leaves 32K free at top
+  TOP_OF_MEM = $78000   ' leaves 32K free at top; 16K of that is locked
   RX_PIN = 63
   TX_PIN = 62
 
@@ -861,7 +863,7 @@ l2idx		long	0	' index into l2 cache
 l2ptr		long	0
 l2tag_base_ptr	long	@@@l2_tags
 cachecnt	long	0
-l2_cache_base	long	$78000
+l2_cache_base	long	TOP_OF_MEM
 
 uartchar	long	0
 uartcnt		long	0
@@ -1062,6 +1064,8 @@ ser_init
 		waitx	##20_000_000/100  ' longer than necessary
 		hubset	##CLOCK_MODE+3
 
+		'hubset ##%0010_0000_0000_0000_0000_0000_0000_0000 ' try to unlock top of memory; does not seem to work
+		' clear write protect
 		mov	x4, ##7 + ((CYCLES_PER_SEC / BAUD) << 16) ' bitperiod
 		wrpin	##_txmode, #TX_PIN
 		wxpin	x4, #TX_PIN

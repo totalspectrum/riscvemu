@@ -141,7 +141,17 @@ xxtea:     68856	58024 cycles       61968 cycles
 fftbench:  70775	56403              50724
 
 
+jit/p2 with 256 byte caches
+dhry -O3: 7873
+xxtea: 45192
+fftbench: 45548
+
 jit/p2 with 128 byte caches
-dhry -O3: 10000!!
-xxtea: 44616 cycles
+dhry -O3: 10152
+xxtea: 44656 cycles
 fftbench: 47642 cycles
+
+with 64 byte caches
+dhry -O3: 10471
+xxtea; 54816
+fftbench: 50242

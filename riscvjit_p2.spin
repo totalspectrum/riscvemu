@@ -667,30 +667,7 @@ absjump
 		jmp	#\0-0
 		
 condbranch
-		test	funct3, #%100 wz
-	if_z	mov	cmp_flag, #%1010	' IF_Z
-	if_nz	mov	cmp_flag, #%1100	' IF_C
-		test	funct3, #%001 wz
-	if_nz	xor	cmp_flag, #$f		' flip sense
-		shl	cmp_flag,#28		' get in high nibble
-		test	funct3, #%010 wz
-		'' write the compare instruction
-	if_z	mov	opdata,cmps_instr
-	if_nz	mov	opdata, cmp_instr
-		setd	opdata, rs1
-		sets	opdata, rs2
-		wrlut	opdata, cacheptr
-		add	cacheptr, #1
-
-		'' now we need to calculate the new pc
-		'' this means re-arranging some bits
-		'' in immval
-		andn 	immval, #$1f
-		or	immval, rd
-		test  	immval, #1 wc
-		bitc	immval, #11
-		andn	immval, #1
-		add	immval, ptrb
+		jmp	#hub_condbranch
 issue_branch_cond		
 		'' BEWARE! ptrb has stepped up by 4, so we need to
 		'' adjust accordingly
@@ -764,7 +741,7 @@ emit_big_instr
 		setd	big_temp_0+1, dest
 		mov	opptr, #big_temp_0
 		'' if the augment bits are 0, skip them
-        if_z	jmp	#emit2
+        if_nz	jmp	#emit2
 		add	opptr, #1
 		jmp	#emit1
 big_temp_0
@@ -952,6 +929,32 @@ end_of_tables
 
 		orgh $800
 hub_condbranch		
+		test	funct3, #%100 wz
+	if_z	mov	cmp_flag, #%1010	' IF_Z
+	if_nz	mov	cmp_flag, #%1100	' IF_C
+		test	funct3, #%001 wz
+	if_nz	xor	cmp_flag, #$f		' flip sense
+		shl	cmp_flag,#28		' get in high nibble
+		test	funct3, #%010 wz
+		'' write the compare instruction
+	if_z	mov	opdata,cmps_instr
+	if_nz	mov	opdata, cmp_instr
+		setd	opdata, rs1
+		sets	opdata, rs2
+		wrlut	opdata, cacheptr
+		add	cacheptr, #1
+
+		'' now we need to calculate the new pc
+		'' this means re-arranging some bits
+		'' in immval
+		andn 	immval, #$1f
+		or	immval, rd
+		test  	immval, #1 wc
+		bitc	immval, #11
+		andn	immval, #1
+		add	immval, ptrb
+		jmp	#issue_branch_cond
+		
 hub_compile_auipc
 		mov	immval, opcode
 		and	immval, LUI_MASK

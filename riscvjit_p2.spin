@@ -386,26 +386,24 @@ reg_reg
 	if_c	mov	opdata, subdata
 nosub
 		'
-		' if rd matches rs2, move rd out of the way
+		' if rd is not the same as rs1, we have
+		' to issue an ALTR 0, #rd
 		'
-		cmp	rd, rs2 wz
-	if_nz	jmp	#notemp
-		sets	mov_temp_op, rd
-		wrlut	mov_temp_op, cacheptr
+		cmp	rd, rs1 wz
+	if_z	jmp	#noaltr
+		sets	altr_op, rd
+		wrlut	altr_op, cacheptr
 		add	cacheptr, #1
-		mov	rs2, #temp
-
-notemp
-		call	#emit_mov_rd_rs1
+noaltr
 		'' now do the operation
 		sets	opdata, rs2
-		setd  	opdata, rd
+		setd  	opdata, rs1
 emit_opdata_and_ret
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
 
-mov_temp_op
-		mov	temp, 0-0
+altr_op
+		altr	x0, #0-0
 
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' for multiply and divide we just generate

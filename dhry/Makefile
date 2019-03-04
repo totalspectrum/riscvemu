@@ -1,5 +1,6 @@
-CDEFS=-DGETMS -DCOUNT=66000
-OPT=-O3
+CDEFS=-DGETMS -DCOUNT=64000
+#OPT=-O3
+OPT=-Os
 
 PROG=dhry
 PROGOBJS=dhry_1.o dhry_2.o dummymalloc.o

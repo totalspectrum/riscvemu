@@ -37,10 +37,12 @@
 #include <stdio.h>
 #include <sys/time.h>
 
-#ifdef __FLEXC__
+#ifdef __propeller__
+#include <propeller.h>
 #define getcyclespersec() (80000000)
 #else
 extern unsigned int getcyclespersec();
+extern unsigned int getcnt();
 #define printf iprintf
 #endif
 
@@ -78,7 +80,6 @@ static void printSpectrum();
 
 // Return a timestamp in microsecond resolution.
 unsigned long time_us() {
-    extern unsigned int getcnt();
     return getcnt() / (getcyclespersec()/1000000);
 }
 

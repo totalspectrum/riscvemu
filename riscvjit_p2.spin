@@ -128,7 +128,6 @@ l1tags		long	0[NUM_L1_TAGS]
 
 		'' now start execution
 startup
-
 ''
 '' set the pc to ptrb
 '' this is the main loop, basically; it's entered with
@@ -140,9 +139,11 @@ startup
 ''
 set_pc
 		mov	cachepc, ptrb
-		and	cachepc, #TOTAL_CACHE_MASK
+		and	cachepc, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		mov	cache_offset, ptrb
 		and	cache_offset, #PC_CACHEOFFSET_MASK
+		shr	cache_offset, #2
+		add	cachepc, cache_offset
 		mov	tagidx, ptrb
 		shr	tagidx, #PC_CACHELINE_BITS
 		and	tagidx, #L1_TAGIDX_MASK
@@ -160,6 +161,8 @@ set_pc
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' routine to compile the cache line starting at ptrb
+' checks for code in the L2 cache first; if it is in
+' there then loads it
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 recompile
 		'' update the L1 cache index
@@ -194,12 +197,10 @@ recompile
 		setq2	#PC_CACHELINE_LEN-1
 .rdcmd
 		rdlong	0-0, l2idx
-#ifdef DEBUG_CACHE
+#ifdef DEBUG_CACHE_DUMP
 		setq2	#PC_CACHELINE_LEN-1
 		rdlong	cacheptr, #0
 		call	#dump_cache
-die2
-		jmp	#die2
 #endif		
 		add	ptrb, #PC_CACHELINE_LEN
 		ret
@@ -208,12 +209,26 @@ need_compile
 		wrlong	ptrb, l2ptr
 		mov	init_cacheptr, cacheptr
 		
-		'' now compile into cachebaseaddr in the LUT
-		'' the cache base address is formed from ptrb, which
-		'' is now pointing at the start of the HUB address
+		'' now compile into cacheptr in the LUT
+		'' ptrb is pointing at the start of the HUB cache line
 		mov	cachecnt, #PC_CACHELINE_LEN/4
 
+		'' first thing in the cache line is a jump table
+		'' 1 for each instruction, which lets us jump into
+		'' the middle of the cache line
+		'' we build that as we go, so just skip cacheptr over it
+		'' for now
+		mov    jmptabptr, cacheptr
+		add    cacheptr, cachecnt
 cachelp
+		'' update the jump table
+		mov	opdata, absjump
+		or	opdata, cacheptr
+		or	opdata, CACHE_START
+		wrlut	opdata, jmptabptr
+		add	jmptabptr, #1
+
+		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
@@ -231,44 +246,47 @@ getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
 		call	temp			' compile the instruction
-pad_instructions
-		'' pad the instruction translation to a multiple of 4
-		test	cacheptr, #3 wz
-	if_nz	call	#emit_nop
-	if_nz	jmp	#pad_instructions
+done_instruction
 		djnz	cachecnt, #cachelp
+		
 		'' finish the cache line
-
-		'' now set the last instructions EXEC flag to 0 (_ret_)
 finish_cache_line
-		setd	.wrcmd, init_cacheptr
+		setd	.l2wrcmd, init_cacheptr ' prepare for eventual copy to L2 cache
+
+		'' we may need to add a nop if previous instruction has a nonzero EXEC flag
+		sub	cacheptr, #1
+		rdlut	opdata, cacheptr
+		add	cacheptr, #1
+		xor	opdata, CONDMASK
+		test	opdata, CONDMASK wz	' are upper bits all 1's
+	if_nz	call	#emit_nop
+	
+		'' now set the last instructions EXEC flag to 0 (_ret_)
 		mov	cmp_flag, #0
 		call	#reset_compare_flag
 		
+		'' sanity check that we haven't gone over the cache line
+		sub	cacheptr, init_cacheptr
+		cmp	cacheptr, #PC_CACHELINE_LEN wcz
+	if_a	jmp	#internal_error
+	
 		'' write back to the L2 cache
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
 		add	l2idx, l2_cache_base
 		
 #ifdef DEBUG_CACHE
-		call	#ser_nl
-		mov	uartchar, #"W"
-		call	#ser_tx
-		mov	info1, cache_line_first_pc
-		call	#ser_hex
-		mov	info1, init_cacheptr
-		call	#ser_hex
-		mov	info1, l2idx
-		call	#ser_hex
-		call	#dump_cache
-#endif		
+		call	#l2_write_debug
+#endif
+
+		'' setq2 + wrlong writes multiple words from LUT to HUB
 		setq2	#PC_CACHELINE_LEN-1
-.wrcmd
+.l2wrcmd
 		wrlong	0-0, l2idx		' set to init_cacheptr
 		ret
 		
 do_illegalinstr
 		call	#illegalinstr
-		jmp	#pad_instructions
+		jmp	#done_instruction
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
 ' if the upper 4 bits of the entry is 0, the entry is
@@ -343,12 +361,11 @@ nosar
 	if_nz	jmp	#reg_reg
 		bith	opdata, #IMM_BITNUM
 
-               ' special case: addi xa, x0, N
-               ' can be translated as mv x0, N
-               ' we can tell it's an add because it will have WZ_BITNUM set
-               testb   opdata, #WZ_BITNUM wc
-       if_c    jmp     #hub_addi
-
+		' special case: addi xa, x0, N
+		' can be translated as mv x0, N
+		' we can tell it's an add because it will have WZ_BITNUM set
+		testb	opdata, #WZ_BITNUM wc
+	if_c	jmp	#hub_addi
 reg_imm
 		'
 		' emit an immediate instruction with optional large prefix
@@ -474,7 +491,7 @@ ldst_common
 	if_nz	jmp	#full_ldst_imm
 		mov	dest, rs1
 		jmp	#final_ldst
-	full_ldst_imm
+full_ldst_imm
 		and	immval, AUGPTR_MASK
 		andn	locptra, AUGPTR_MASK
 		or	locptra, immval
@@ -667,20 +684,21 @@ issue_branch_cond
 		'' adjust accordingly
 		sub	immval, #4
 
-		mov    temp, immval
-		sub    temp, cache_line_first_pc  ' calculate immval - cache_line_start
-		cmp    temp, #PC_CACHELINE_LEN wcz
-	if_ae	jmp    #normal_branch
-		
+		mov	cache_offset, immval
+		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
+		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
+	if_ae	jmp    	#normal_branch
+		shr	cache_offset, #2
 		'' want to emit a conditional jump here
 		mov	opdata, absjump
-		and	immval, #TOTAL_CACHE_MASK
+		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		add	immval, CACHE_START
+		add	immval, cache_offset
 		or	opdata, immval
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
-		
+
 normal_branch
 		'' now write a conditional loc and ret
 		call	#emit_pc_immval
@@ -858,6 +876,7 @@ divflags	long	0
 opptr		long	0
 cacheptr	long	0
 init_cacheptr	long	0
+jmptabptr	long	0
 
 CACHE_START	long	$200	'start of cache area: $000-$0ff in LUT
 cachepc		long	0
@@ -925,21 +944,18 @@ end_of_tables
 ''
 
 		orgh $800
-               '
-               ' handle addi instruction specially
-               ' if we get addi R, x0, N
-               ' we emit mov R, #N instead
-               ' similarly addi R, N, 0
-               ' can become mov R, N
-	       ' and add R, A, -N
-	       ' can become sub R, A, N
-	       ' (we haven't done the last one yet
+		'
+		' handle addi instruction specially
+		' if we get addi R, x0, N
+		' we emit mov R, #N instead
+		' similarly addi R, N, 0
+		' can become mov R, N
 hub_addi
-               cmp	immval, #0 wcz
-       if_z    jmp     	#emit_mov_rd_rs1
-               cmp     	rs1, #x0 wz
-       if_z    mov	dest, rd
-       if_z    jmp     	#emit_mvi
+		cmp	immval, #0 wcz
+	if_z	jmp	#emit_mov_rd_rs1
+		cmp	rs1, #x0 wz
+	if_z	mov	dest, rd
+	if_z	jmp	#emit_mvi
 		' convert addi A, B, -N to sub A, B, N
 		cmp	immval, #0 wcz
 	if_ae	jmp	#reg_imm
@@ -1234,6 +1250,8 @@ l2_read_debug
 		call	#ser_tx
 		mov	info1, ptrb
 		call	#ser_hex
+		mov	info1, cachepc
+		call	#ser_hex
 		mov	info1, cacheptr
 		call	#ser_hex
 		mov	info1, l2idx
@@ -1254,6 +1272,19 @@ dump_cache
 		call	#ser_nl
 		ret
 
+l2_write_debug
+		call	#ser_nl
+		mov	uartchar, #"W"
+		call	#ser_tx
+		mov	info1, cache_line_first_pc
+		call	#ser_hex
+		mov	info1, cachepc
+		call	#ser_hex
+		mov	info1, init_cacheptr
+		call	#ser_hex
+		mov	info1, l2idx
+		call	#ser_hex
+		call	#dump_cache
 #endif
 
 ser_nl
@@ -1262,6 +1293,15 @@ ser_nl
 		mov	uartchar, #10
 		call	#ser_tx
 		ret
+internal_error
+		mov	info1, ptrb
+		sub	info1, #PC_CACHELINE_LEN
+		call	#ser_hex
+		mov	info1, cacheptr
+		call	#ser_hex
+		loc	ptra, #cache_error_msg
+		call	#ser_str
+.die		jmp	#.die
 
 l2_tags
 		long	0[NUM_L2_TAGS]

@@ -90,6 +90,19 @@ PUB start(params)
 
 DAT
 		org 0
+		'' initial COG boot code
+		cogid	   pa
+		setq	   #0
+		coginit	   pa, ##$400
+		' config area
+		orgh $10
+		long	   0
+		long	   160_000_000	' frequency
+		long	   $010007f8	' clock mode
+		long	   230_400	' baud
+
+		orgh $400
+		org 0
 enter
 x0		nop
 x1		jmp	#x3
@@ -964,11 +977,11 @@ end_of_tables
 
 		fit	$1f0
 
+		orgh
 ''
 '' some lesser used routines that can go in HUB memory
 ''
 
-		orgh $800
 		'
 		' handle addi instruction specially
 		' if we get addi R, x0, N
@@ -1263,6 +1276,8 @@ cache_error_msg
 		byte	"*** JIT ERROR: bad cache line ending", 10, 13, 0
 hex_buf
 		byte  0[8], 0
+
+		alignl
 reg_buf
 		long 0[32]
 reg_buf_end

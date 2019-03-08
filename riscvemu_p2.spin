@@ -1,5 +1,5 @@
 #define USE_CORDIC
-#define CHECK_WRITES
+'#define CHECK_WRITES
 #define DEBUG
 {{
    RISC-V Emulator for Parallax Propeller

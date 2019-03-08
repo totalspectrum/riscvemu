@@ -1,5 +1,5 @@
-RISC-V Emulator for Parallax Propeller
-Copyright 2017 Total Spectrum Software Inc.
+RISC-V Emulators for Parallax Propeller and Propeller 2
+Copyright 2017-2019 Total Spectrum Software Inc.
 Terms of use: MIT License (see the file LICENSE.txt)
 
 An emulator for the RISC-V processor architecture, designed to run
@@ -72,7 +72,103 @@ Emulated CSRs:
 ```
   C00 - cycle counter
   BC0 - uart register; bytes written here go to the serial port
+        you can also read from it to read a byte (it returns -1 if
+	no byte is available yet)
   BC1 - wait register; if a value is written here we wait until the
         cycle counter matches it
   7Fx - COG registers 1F0 - 1FF
 ```
+----------------------------------------------------------------------
+Custom instructions
+
+we use the custom0 opcode space:
+
+instructions:
+
+coginit res, addr, param
+   .insn r CUSTOM_1, 0, 0, res, addr, param
+   addr is address of COG code to run, or 0 for RISC-V kernel
+   param is parameter to pass (stack pointer for RISC-V kernel)
+
+hubset x0, rN
+   .insn r CUSTOM_1, 0, 1, x0, rN, x0
+   
+
+drv val, offset_mode(pin)
+   .insn s  CUSTOM_0, 0, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
+           zz = 00 => store val to pin (use val=x0 for drvl etc.)     
+	        01 => store random data to pin (drvrnd etc.)
+		10 => store !val to pin (use val=x0 for drvh etc.)
+		11 => invert pin (drvnot etc.)
+		
+flt val, offset_mode(pin)
+   .insn s  CUSTOM_0, 1, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
+           zz = 00 => store val to pin (use val=x0 for fltl)     
+	        01 => store random data to pin (fltrnd)
+		10 => store !val to pin (use val=x0 for flth)
+		11 => invert pin (fltnot)
+		
+out val, offset_mode(pin)
+   .insn s  CUSTOM_0, 2, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
+           zz = 00 => store val to pin (use val=x0 for outl)     
+	        01 => store random data to pin (outrnd)
+		10 => store !val to pin (use val=x0 for outh)
+		11 => invert pin (outnot)
+		
+dir val, offset_mode(pin)
+   .insn s  CUSTOM_0, 3, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
+           zz = 00 => store val to pin (use val=x0 for dirl)     
+	        01 => store random data to pin (dirrnd)
+		10 => store !val to pin (use val=x0 for dirh)
+		11 => invert pin (dirnot)
+		
+wrpin  mode, offset_mode(pin)
+   .insn s CUSTOM_0, 4, mode, offset(pin)
+   does wrpin/wxpin/wypin mode, pin+offset; leaves mode unchanged
+   offset_mode is %zz_xxxx_pppppp where:
+       pppppp is offset to add to pin
+       xxxx is reserved (set to 0)
+       zz is: 00 for wrpin, 01 for wxpin, 10 for wypin
+       
+getpin res, offset_mode(pin)
+   .insn l CUSTOM_0, 5, res, offset_mode(pin)
+   gets value of pin at pin+offset into res
+   offset_mode is %zz_xxxx_pppppp where:
+       pppppp is offset to add to pin
+       xxxx is reserved (set to 0)
+       zz is:
+         00: read pin value (0 or 1) into res
+	 01: do rdpin into res
+	 10: do rqpin into res
+	 11: do akpin
+
+   
+ ==========================================
+ STREAMER:
+ setdacs d0
+ setxfrq d0
+ xinit d, s
+ xzero d, s
+ xcont d, s
+ getxacc result1, result2
+ rdfast count, base
+ rflong res
+ rfword res
+ rfbyte res
+ 

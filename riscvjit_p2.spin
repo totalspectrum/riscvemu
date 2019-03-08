@@ -1,4 +1,4 @@
-{{
+o{{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017-2019 Total Spectrum Software Inc.
    Terms of use: MIT License (see the file LICENSE.txt)
@@ -450,15 +450,13 @@ mul_templ
 '' variants for sltu and slt
 '' these should generate something like:
 ''     cmp	rs1, rs2 wc
-''     mov	rd, #0
-''     muxc	rd, #1
+''     wrc	rd
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 sltfunc
 		jmp	#\hub_slt_func
 
 sltfunc_pat
-		mov	0-0, #0
-		muxc	0-0, #1
+		wrc	0-0
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
@@ -679,6 +677,13 @@ absjump
 		
 condbranch
 		jmp	#hub_condbranch
+
+		''
+		'' issue a conditional branch to the value in
+		'' "immval"
+		'' cmp_flag has the P2 flags to use for the condition
+		'' ($F0000000 for unconditional branch)
+		''
 issue_branch_cond		
 		'' BEWARE! ptrb has stepped up by 4, so we need to
 		'' adjust accordingly
@@ -686,15 +691,35 @@ issue_branch_cond
 
 		mov	cache_offset, immval
 		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
+		'' is it in the same cache line?
 		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    	#normal_branch
+
+		'' yes: prepare a conditional jump here
+		'' recall that the cache line starts with a jump table
+		'' that maps RV32 instructions to their P2 equivalents
 		shr	cache_offset, #2
-		'' want to emit a conditional jump here
-		mov	opdata, absjump
+
+		' make immval point to the jump table entry
 		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
-		add	immval, CACHE_START
 		add	immval, cache_offset
+#ifdef ALWAYS
+		'' optimization: see if we've already emitted the jump
+		'' we're jumping to; if so, we can grab it from the
+		'' jump table and skip a level of indirection
+		'' basically this menas backwards branches go faster
+		'' if (immval - jmptabptr < 0, we've already made the jump
+		cmp	immval, jmptabptr wcz
+	if_ae	jmp	#make_new_jump
+		rdlut	opdata, immval
+		jmp	#have_opcode
+#endif		
+make_new_jump
+		'' want to emit a conditional jump here
+		add	immval, CACHE_START
+		mov	opdata, absjump
 		or	opdata, immval
+have_opcode
 		andn	opdata, CONDMASK
 		or	opdata, cmp_flag
 		jmp	#emit_opdata_and_ret
@@ -1010,7 +1035,6 @@ hub_slt_func
 	
 		andn	opdata, #$1ff	' zero out source
 		setd	sltfunc_pat, rd
-		setd	sltfunc_pat+1, rd
 		'' check for immediate
 		test	opcode, #$20 wz
 	if_nz	jmp	#slt_reg
@@ -1028,7 +1052,7 @@ slt_reg
 		add	cacheptr, #1
 slt_fini
 		mov	opptr, #sltfunc_pat
-		jmp	#emit2		' return from there to our caller
+		jmp	#emit1		' return from there to our caller
 		
 
 compile_csrw

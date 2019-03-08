@@ -161,7 +161,13 @@ dhry -O3: 10976  / 11363
 xxtea:    36632  / 47124
 fftbench: 41989  / 44590
 
-with more optimizations: 128 byte lines
+with more optimizations: 128 / 64 byte lines
 dhry -O3: 11111 / 11412
 xxtea:    33232 / 43708
 fftbench: 38010 / 40609
+
+branch optimization 128
+
+dhry:      11159 
+xxtea:     33272
+fft_bench: 37909

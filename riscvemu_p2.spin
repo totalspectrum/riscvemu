@@ -734,25 +734,9 @@ breakit
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
-		call	#readregs	' read new registers
+		call	#\readregs	' read new registers
 checkdebug_ret	ret
 		
-dumpregs
-		mov	cogaddr, #x0
-		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #40*4
-		call	#cogxfr_write
-dumpregs_ret
-		ret
-
-readregs
-		mov	cogaddr, #x0
-		mov	hubaddr, dbgreg_addr
-		mov	hubcnt, #40*4
-		call	#cogxfr_read
-		mov	x0, #0		'
-readregs_ret
-		ret
 newcmd		long 0
 sendcmd
 		call	#waitcmdclear
@@ -776,6 +760,13 @@ waitcmdclear_ret
 		ret
 		
 	
+dumpregs
+		mov	cogaddr, #x0
+		mov	hubaddr, dbgreg_addr
+		mov	hubcnt, #40*4
+		call	#cogxfr_write
+		ret
+
 '------------------------------------------------------------------------------
 ' routines for fast transfer of COG memory to/from hub
 ' "hubaddr"   is the HUB memory address
@@ -820,3 +811,12 @@ funct3		long	0
 divflags	long	0
 
 		fit	$1f0	'$1F0 is whole thing
+
+		orgh $800
+readregs
+		mov	cogaddr, #x0
+		mov	hubaddr, dbgreg_addr
+		mov	hubcnt, #40*4
+		call	#cogxfr_read
+		mov	x0, #0
+		ret

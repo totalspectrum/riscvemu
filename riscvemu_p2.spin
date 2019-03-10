@@ -723,7 +723,7 @@ checkdebug
 		mov	temp, lastpc
 		xor	temp, shadowpc
 		andn	temp, #$F wz
-	if_z	jmp	skip_memchk
+	if_z	jmp	#skip_memchk
 		call	#mem_checksum
 skip_memchk
 		mov	lastpc, shadowpc

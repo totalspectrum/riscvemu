@@ -107,8 +107,14 @@ lastpc		long	0
 #endif
 
 emustart
+		' load helper code into LUT
+		' LUT 00-7f is used for an opcode table
+		' 80-1ff is free for code
+		setq2   #$1ff-$80
+		rdlong	$80, lut_code_ptr
 		jmp	#nexti
-
+lut_code_ptr
+		long	@@@LUT_Helper
 jmpillegalinstr
 		long	illegalinstr
 		
@@ -734,14 +740,11 @@ breakit
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
-		call	#\readregs	' read new registers
-checkdebug_ret	ret
+		jmp	#\readregs	' read new registers
+checkdebug_ret
+		ret
 		
 newcmd		long 0
-sendcmd
-		call	#waitcmdclear
-		wrlong	newcmd, cmd_addr
-sendcmd_ret	ret
 
 sendrecvcmd
 		call	#waitcmdclear
@@ -812,7 +815,10 @@ divflags	long	0
 
 		fit	$1f0	'$1F0 is whole thing
 
-		orgh $800
+		' helper code in LUT
+		org	 $280
+LUT_Helper
+
 readregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
@@ -820,3 +826,11 @@ readregs
 		call	#cogxfr_read
 		mov	x0, #0
 		ret
+
+sendcmd
+		call	#waitcmdclear
+		wrlong	newcmd, cmd_addr
+		ret
+
+END_LUT_Helper
+		fit	$3ff

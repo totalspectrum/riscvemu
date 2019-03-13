@@ -1,6 +1,7 @@
 #define USE_CORDIC
 '#define CHECK_WRITES
 #define DEBUG
+#define USE_LUT_FOR_CODE
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017 Total Spectrum Software Inc.
@@ -85,8 +86,8 @@ x24		wrlut	jmpjalr,   #3+($19<<2)
 x25		wrlut	jmpjal,    #3+($1b<<2)
 x26		wrlut	jmpsys,    #3+($1c<<2)
 x27		mov	x0, #0
-x28		nop
-x29		nop
+x28		wrlut	jmpcustom0, #3+($02<<2) 
+x29		wrlut	jmpcustom1, #3+($0A<<2)
 x30		nop
 x31		jmp	#emustart
 
@@ -107,6 +108,7 @@ lastpc		long	0
 #endif
 
 emustart
+#ifdef USE_LUT_FOR_CODE
 		' load helper code into LUT
 		' LUT 00-7f is used for an opcode table
 		' 80-1ff is free for code
@@ -115,17 +117,24 @@ emustart
 		jmp	#nexti
 lut_code_ptr
 		long	@@@LUT_Helper
+#else
+		jmp	#nexti
+#endif		
 jmpillegalinstr
 		long	illegalinstr
 		
 jmploadop
 {00}		long	loadop	' load
+jmpcustom0
+{02}		long	custom0op	' immediate custom
 jmpimmop
 {04}		long	immediateop	' math immediate
 jmpauipc
 {05}		long	auipc		' auipc
 jmpstoreop
 {08}		long	storeop	' store
+jmpcustom1
+{0A}		long	custom1op	' reg/reg  custom
 jmpregop
 {0C}		long	regop		' math reg
 jmplui
@@ -164,6 +173,16 @@ multab
 {6}		long	imp_rem
 {7}		long	imp_remu
 
+custom0tab
+		long	illegalinstr
+		long	illegalinstr
+		long	drvpininstr
+		long	fltpininstr
+		long	outpininstr
+		long	dirpininstr
+		long	wrpininstr
+		long	getpininstr
+		
 		''
 		'' main instruction decode loop
 		''
@@ -517,46 +536,6 @@ sysinstr
 		mov	funct3, 0-0
 		jmp	funct3
 
-csrrw
-csrrs
-csrrc
-		mov	info3, opcode
-		mov	dest, #0
-		cmp	opcode, ##$C00 wz, wc
-	if_nz	jmp	#not_timer
-		getct	dest
-		jmp	#write_and_nexti
-not_timer
-		cmp	opcode, ##$BC0 wz
-	if_nz	jmp	#not_uart
-		'' is this a send or receive
-		cmp	rs1, #0 wz
-	if_nz	jmp	#uart_send
-		mov	newcmd, #$E	' read
-		call	#sendrecvcmd
-		jmp	#write_and_nexti
-uart_send
-		alts	rs1, #x0
-		mov	newcmd, 0-0
-		shl	newcmd, #4
-		or	newcmd, #$F
-		call	#sendcmd
-		jmp	#nexti
-not_uart
-		cmp	opcode, ##$BC2 wz
-	if_nz	jmp	#not_debug
-		alts	rs1, #x0
-		mov	debugtrace, 0-0
-		call	#mem_checksum
-		jmp	#nexti
-not_debug
-		jmp	#illegalinstr
-
-mem_checksum
-		call	#dumpregs
-		mov	newcmd, #$D
-		jmp	#sendrecvcmd
-		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' implement conditional branches
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -740,7 +719,7 @@ breakit
 		mov	newcmd, #1	' single step command
 		call	#sendcmd	' send info
 		call	#waitcmdclear	' wait for response
-		jmp	#\readregs	' read new registers
+		jmp	#readregs	' read new registers
 checkdebug_ret
 		ret
 		
@@ -811,14 +790,18 @@ rd		long	0
 rs1		long	0
 rs2		long	0
 funct3		long	0
+funct2		long	0
 divflags	long	0
 
 		fit	$1f0	'$1F0 is whole thing
 
+#ifdef USE_LUT_FOR_CODE
 		' helper code in LUT
 		org	 $280
 LUT_Helper
-
+#else
+		orgh
+#endif		
 readregs
 		mov	cogaddr, #x0
 		mov	hubaddr, dbgreg_addr
@@ -831,6 +814,196 @@ sendcmd
 		call	#waitcmdclear
 		wrlong	newcmd, cmd_addr
 		ret
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' implement custom instructions
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+custom0op
+		call	#decodeall
+	
+		' these are the various set pin instructions
+		alts	rs2, #x0
+		mov	dest, 0-0	' set dest to value of rs2 (value to write)
+		alts	rs1, #x0
+		mov	rs1, 0-0	' set rs1 to pin offset
+		
+		cmp	funct3, #7 wz
+	if_z	jmp	#getpininstr
+
+		'' extract s-type immediate into "opcode"
+		call	#get_s_imm
+		mov	funct2, opcode
+		sar	funct2, #10
+		and	funct2, #3
+		and	opcode, #$3f	' isolate pin
+		add	rs1, opcode	' update pin value
+		alts	funct3, #custom0tab
+		mov	funct3,0-0
+		jmp	funct3		' go do operation
+
+		'' fetch pin value
+		'' similar to a load instruction
+getpininstr
+		shr	opcode, #20	' extract immediate
+		mov	funct2, opcode
+		shr	funct2, #10	' extract function selector
+		and	opcode, #$3f	' extract pin mask
+		add	rs1, opcode	' rs1 contains pin to fetch
+		rczr	funct2 wcz	' c = D[1], z = d[0]
+  if_00		jmp	#do_testp
+  if_01		rdpin	dest, rs1
+  if_10		rqpin	dest, rs1
+  if_11		akpin	rs1
+  		jmp	#write_and_nexti
+do_testp	testp	rs1 wc
+  		wrc	dest
+		jmp	#write_and_nexti
+
+		'' do one of wrpin, wxpin, wypin
+wrpininstr
+		rczr	funct2 wcz
+    if_00	wrpin	dest, rs1
+    if_01	wxpin	dest, rs1
+    if_10	wypin	dest, rs1
+    if_11	jmp	#illegalinstr
+    		jmp	#nexti
+
+		' pin instructions; funct2 controls
+		' value to use for pin
+		' 00 = use dest
+		' 01 = use !dest
+		' 10 = set dest to random
+		' 11 = use !(old pin value)
+get_pinval
+		rczr	funct2 wcz
+    if_01	not	dest
+    if_10	getrnd	dest
+    if_11	jmp	#get_old_pinval
+    		testb	dest, #0 wc
+    		ret
+		
+get_old_pinval
+		test	rs1, #$20 wz	' bits 32-63?
+    if_nz	mov	dest, outb
+    if_z	mov	dest, outa
+    		testb	dest, rs1 wc
+    		wrnc	dest
+		ret
+drvpininstr
+		call	#get_pinval
+		drvl	#56
+    		drvc	rs1
+		jmp	#nexti
+fltpininstr
+		call	#get_pinval
+    		fltc	rs1
+		jmp	#nexti
+dirpininstr
+		call	#get_pinval
+    		dirc	rs1
+    		jmp	#nexti
+outpininstr
+		call	#get_pinval
+    		outc	rs1
+		jmp	#nexti
+custom1op
+		call	#decodeall
+		shr	opcode, #25	' funct7
+		cmp	funct3, #0 wz
+    if_nz	jmp	#illegalinstr
+    		alts	rs1, #x0
+		mov	rs1, 0-0
+		alts	rs2, #x0
+		mov	rs2, 0-0
+		cmp	opcode, #0 wz
+    if_nz	jmp	#not_coginit
+    		setq	rs2
+		coginit dest, rs1
+		jmp	#write_and_nexti
+not_coginit
+		jmp	#illegalinstr
+
+csrrw
+		mov	funct3, #0
+		jmp	#do_csr
+csrrs
+		mov	funct3, #1
+		jmp	#do_csr
+csrrc
+		mov	funct3, #2
+do_csr
+		mov	info3, opcode
+		mov	dest, #0
+		cmp	opcode, ##$C00 wz, wc
+	if_nz	jmp	#not_timer
+		getct	dest
+		jmp	#write_and_nexti
+not_timer
+		cmp	opcode, ##$BC0 wz
+	if_nz	jmp	#not_uart
+		'' is this a send or receive
+		cmp	rs1, #0 wz
+	if_nz	jmp	#uart_send
+		mov	newcmd, #$E	' read
+		call	#sendrecvcmd
+		jmp	#write_and_nexti
+uart_send
+		alts	rs1, #x0
+		mov	newcmd, 0-0
+		shl	newcmd, #4
+		or	newcmd, #$F
+		call	#sendcmd
+		jmp	#nexti
+not_uart
+		cmp	opcode, ##$BC1 wz
+	if_nz	jmp	#not_waitct
+		alts	rs1, #x0
+		mov	rs1, 0-0
+		addct1	rs1, #0
+		waitct1
+		jmp	#nexti
+not_waitct
+		cmp	opcode, ##$BC2 wz
+	if_nz	jmp	#not_debug
+		alts	rs1, #x0
+		mov	debugtrace, 0-0
+		call	#mem_checksum
+		jmp	#nexti
+not_debug
+		' check for COG register
+		getnib	funct2, opcode, #2
+		and	temp, #$1FF
+		cmp	funct2, #7 wz
+	if_nz	jmp	#illegalinstr
+
+		' first, get the old value
+		mov	dest, #0
+		cmp	rd, #0 wz
+	if_e	jmp	#skip_read
+		alts	temp, #0
+		mov	dest, 0-0
+skip_read
+		' now write back the new value, if it is not x0
+		cmp	rs1, #0 wz
+	if_e	jmp   	#skip_write
+		alts  	rs1, #x0
+		mov   	rs1, 0-0
+		' depending on opcode, we may want to do a mov, or, or andn
+		rczr	funct3 wcz
+	if_00	altd	temp, #0
+	if_00	mov   	0-0, rs1
+	if_01	altd  	temp, #0
+	if_01	or    	0-0, rs1
+	if_10	altd  	temp, #0
+	if_10	andn  	0-0, rs1
+skip_write
+		jmp	#write_and_nexti
+
+mem_checksum
+		call	#dumpregs
+		mov	newcmd, #$D
+		jmp	#sendrecvcmd
+		
 
 END_LUT_Helper
 		fit	$3ff

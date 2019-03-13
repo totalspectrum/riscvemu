@@ -85,69 +85,67 @@ we use the custom0 opcode space:
 
 instructions:
 
-coginit res, addr, param
-   .insn r CUSTOM_1, 0, 0, res, addr, param
-   addr is address of COG code to run, or 0 for RISC-V kernel
-   param is parameter to pass (stack pointer for RISC-V kernel)
+We add new instructions to the CUSTOM_0 and CUSTOM_1 name spaces
 
-hubset x0, rN
-   .insn r CUSTOM_1, 0, 1, x0, rN, x0
-   
+CUSTOM_0 is used for i format (2 registers, 1 imm) (like many others in 00-07)
+CUSTOM_1 is used for r format (3 registers)
+
+CUSTOM_0, 0 and CUSTOM_0, 1 are reserved
 
 drv val, offset_mode(pin)
-   .insn s  CUSTOM_0, 0, val, offset_mode(pin)
-   offset_mode is %zz_xxxx_pppppp, where:
-        pppppp is offset added to pin
-	xxxx is reserved (used for selecting groups of pins in future?)
-	zz
-           zz = 00 => store val to pin (use val=x0 for drvl etc.)     
-	        01 => store random data to pin (drvrnd etc.)
-		10 => store !val to pin (use val=x0 for drvh etc.)
-		11 => invert pin (drvnot etc.)
-		
-flt val, offset_mode(pin)
-   .insn s  CUSTOM_0, 1, val, offset_mode(pin)
-   offset_mode is %zz_xxxx_pppppp, where:
-        pppppp is offset added to pin
-	xxxx is reserved (used for selecting groups of pins in future?)
-	zz
-           zz = 00 => store val to pin (use val=x0 for fltl)     
-	        01 => store random data to pin (fltrnd)
-		10 => store !val to pin (use val=x0 for flth)
-		11 => invert pin (fltnot)
-		
-out val, offset_mode(pin)
    .insn s  CUSTOM_0, 2, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
 	zz
-           zz = 00 => store val to pin (use val=x0 for outl)     
-	        01 => store random data to pin (outrnd)
-		10 => store !val to pin (use val=x0 for outh)
-		11 => invert pin (outnot)
+           zz = 00 => store val to pin (use val=x0 for drvh etc.)     
+		01 => store !val to pin (use val=x0 for drvh etc.)
+	        10 => store random data to pin (drvrnd etc.)
+		11 => invert pin (drvnot etc.)
 		
-dir val, offset_mode(pin)
+flt val, offset_mode(pin)
    .insn s  CUSTOM_0, 3, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
 	zz
+           zz = 00 => store val to pin (use val=x0 for fltl)     
+		01 => store !val to pin (use val=x0 for flth)
+	        10 => store random data to pin (fltrnd)
+		11 => invert pin (fltnot)
+		
+out val, offset_mode(pin)
+   .insn s  CUSTOM_0, 4, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
+           zz = 00 => store val to pin (use val=x0 for outl)     
+		01 => store !val to pin (use val=x0 for outh)
+	        10 => store random data to pin (outrnd)
+		11 => invert pin (outnot)
+		
+dir val, offset_mode(pin)
+   .insn s  CUSTOM_0, 5, val, offset_mode(pin)
+   offset_mode is %zz_xxxx_pppppp, where:
+        pppppp is offset added to pin
+	xxxx is reserved (used for selecting groups of pins in future?)
+	zz
            zz = 00 => store val to pin (use val=x0 for dirl)     
-	        01 => store random data to pin (dirrnd)
-		10 => store !val to pin (use val=x0 for dirh)
+		01 => store !val to pin (use val=x0 for dirh)
+	        10 => store random data to pin (dirrnd)
 		11 => invert pin (dirnot)
 		
 wrpin  mode, offset_mode(pin)
-   .insn s CUSTOM_0, 4, mode, offset(pin)
+   .insn s CUSTOM_0, 6, mode, offset(pin)
    does wrpin/wxpin/wypin mode, pin+offset; leaves mode unchanged
    offset_mode is %zz_xxxx_pppppp where:
        pppppp is offset to add to pin
        xxxx is reserved (set to 0)
-       zz is: 00 for wrpin, 01 for wxpin, 10 for wypin
+       zz is: 00 for wrpin, 01 for wxpin, 10 for wypin, 11 is reserved
        
 getpin res, offset_mode(pin)
-   .insn l CUSTOM_0, 5, res, offset_mode(pin)
+   .insn l CUSTOM_0, 7, res, offset_mode(pin)
    gets value of pin at pin+offset into res
    offset_mode is %zz_xxxx_pppppp where:
        pppppp is offset to add to pin
@@ -159,6 +157,18 @@ getpin res, offset_mode(pin)
 	 11: do akpin
 
    
+CUSTOM_1:
+
+cognew res, addr, param
+   .insn r CUSTOM_1, 0, 0, res, addr, param
+   addr is address of COG code to run, or 0 for RISC-V kernel
+   param is parameter to pass (stack pointer for RISC-V kernel)
+   does a coginit with fixed D0 (to allocate a new COG)
+   
+hubset x0, rN, x0
+   .insn r CUSTOM_1, 0, 1, x0, rN, x0
+   
+
  ==========================================
  STREAMER:
  setdacs d0

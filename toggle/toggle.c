@@ -1,33 +1,33 @@
+/*
+ * pin toggle test program
+ * designed for P2 version of RiscV emulator
+ */
+
 #include <stdint.h>
+#include "riscv.h"
 
 extern void iprintf(const char *, ...);
-extern uint32_t getcnt(void);
-extern uint32_t waitcnt(uint32_t tim);
-extern uint32_t pin_dirout(uint32_t mask);
-extern uint32_t pin_outhi(uint32_t mask);
-extern uint32_t pin_outlo(uint32_t mask);
 
 void main()
 {
     uint32_t cycles;
-    uint32_t freq = 80000000;
-    uint32_t mask = 0x1ffff;
+    uint32_t freq = 160000000;
+    uint32_t pin = 57;
     uint32_t x;
     
-    x = pin_dirout(mask);
-    iprintf("mask was: %08x\n", x);
-    x = pin_dirout(mask);
-    iprintf("mask is: %08x\n", x);
+    iprintf("pin is: %08x\n", pin);
     cycles = getcnt();
     for(;;) {
-        x = pin_outlo(mask);
+        setpin(pin, 0);
+        x = csr_read(OUTB);
         iprintf("ping: %08x\n", x);
         cycles += freq;
         waitcnt(cycles);
-        x = pin_outhi(mask);
+        setpin(pin, 1);
+        x = csr_read(OUTB);
         iprintf(" pong: %08x\n", x);
         cycles += freq;
         waitcnt(cycles);
     }
 }
-           
+

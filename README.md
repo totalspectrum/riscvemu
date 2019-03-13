@@ -93,7 +93,7 @@ CUSTOM_1 is used for r format (3 registers)
 CUSTOM_0, 0 and CUSTOM_0, 1 are reserved
 
 drv val, offset_mode(pin)
-   .insn s  CUSTOM_0, 2, val, offset_mode(pin)
+   .insn sb  CUSTOM_0, 2, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
@@ -104,7 +104,7 @@ drv val, offset_mode(pin)
 		11 => invert pin (drvnot etc.)
 		
 flt val, offset_mode(pin)
-   .insn s  CUSTOM_0, 3, val, offset_mode(pin)
+   .insn sb  CUSTOM_0, 3, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
@@ -115,7 +115,7 @@ flt val, offset_mode(pin)
 		11 => invert pin (fltnot)
 		
 out val, offset_mode(pin)
-   .insn s  CUSTOM_0, 4, val, offset_mode(pin)
+   .insn sb  CUSTOM_0, 4, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
@@ -126,7 +126,7 @@ out val, offset_mode(pin)
 		11 => invert pin (outnot)
 		
 dir val, offset_mode(pin)
-   .insn s  CUSTOM_0, 5, val, offset_mode(pin)
+   .insn sb  CUSTOM_0, 5, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
@@ -137,7 +137,7 @@ dir val, offset_mode(pin)
 		11 => invert pin (dirnot)
 		
 wrpin  mode, offset_mode(pin)
-   .insn s CUSTOM_0, 6, mode, offset(pin)
+   .insn sb CUSTOM_0, 6, mode, offset(pin)
    does wrpin/wxpin/wypin mode, pin+offset; leaves mode unchanged
    offset_mode is %zz_xxxx_pppppp where:
        pppppp is offset to add to pin
@@ -145,7 +145,7 @@ wrpin  mode, offset_mode(pin)
        zz is: 00 for wrpin, 01 for wxpin, 10 for wypin, 11 is reserved
        
 getpin res, offset_mode(pin)
-   .insn l CUSTOM_0, 7, res, offset_mode(pin)
+   .insn s CUSTOM_0, 7, res, offset_mode(pin)
    gets value of pin at pin+offset into res
    offset_mode is %zz_xxxx_pppppp where:
        pppppp is offset to add to pin

@@ -972,18 +972,16 @@ not_waitct
 not_debug
 		' check for COG register
 		getnib	funct2, opcode, #2
+		mov	temp, opcode
 		and	temp, #$1FF
 		cmp	funct2, #7 wz
 	if_nz	jmp	#illegalinstr
 
 		' first, get the old value
-		mov	dest, #0
-		cmp	rd, #0 wz
-	if_e	jmp	#skip_read
 		alts	temp, #0
 		mov	dest, 0-0
 skip_read
-		' now write back the new value, if it is not x0
+		' now write the new value to the hw register, unless src is x0
 		cmp	rs1, #0 wz
 	if_e	jmp   	#skip_write
 		alts  	rs1, #x0

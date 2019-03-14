@@ -87,7 +87,7 @@ instructions:
 
 We add new instructions to the CUSTOM_0 and CUSTOM_1 name spaces
 
-CUSTOM_0 is used for i format (2 registers, 1 imm) (like many others in 00-07)
+CUSTOM_0 is used for s or sb format (2 registers, 1 imm) (like many others in 00-07)
 CUSTOM_1 is used for r format (3 registers)
 
 CUSTOM_0, 0 and CUSTOM_0, 1 are reserved
@@ -98,8 +98,8 @@ drv val, offset_mode(pin)
         pppppp is offset added to pin
 	xxxx is reserved (used for selecting groups of pins in future?)
 	zz
-           zz = 00 => store val to pin (use val=x0 for drvh etc.)     
-		01 => store !val to pin (use val=x0 for drvh etc.)
+           zz = 00 => store val to pin (use val=x0 for drvl)     
+		01 => store !val to pin (use val=x0 for drvh)
 	        10 => store random data to pin (drvrnd etc.)
 		11 => invert pin (drvnot etc.)
 		

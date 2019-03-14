@@ -253,7 +253,7 @@ cachelp
 		mov	opdata, 0-0		' fetch long from table
 		test	opdata, CONDMASK wz	' are upper bits 0?
 	if_nz	jmp	#getinstr
-		alts	funct3, opdata		' do table indirection
+		alts	func3, opdata		' do table indirection
 		mov	opdata, 0-0
 getinstr
 		mov	temp, opdata
@@ -303,14 +303,14 @@ do_illegalinstr
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
 ' if the upper 4 bits of the entry is 0, the entry is
-' actually a pointer to another table (indexed by funct3)
+' actually a pointer to another table (indexed by func3)
 ' otherwise, the bottom 9 bits is a jump address and
 ' the upper 23 bits is a parameter
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 optable
 {00}		long	loadtab		' load
 {01}		and	0, illegalinstr	' float load
-{02}		and	0, illegalinstr	' custom0
+{02}		long	custom0tab	' custom0
 {03}		and	0, illegalinstr	' fence
 {04}		long	mathtab		' math immediate: points to sub table
 {05}		and	0,auipc		' auipc
@@ -444,7 +444,7 @@ multab
 	call	#\imp_remu
 	
 muldiv
-	alts	funct3, #multab
+	alts	func3, #multab
 	mov	temp, 0-0
 	sets	mul_templ, rs1
 	sets	mul_templ+1, rs2
@@ -503,8 +503,8 @@ ldst_common
 		mov	dest, rs1
 		jmp	#final_ldst
 full_ldst_imm
-		and	immval, AUGPTR_MASK
-		andn	locptra, AUGPTR_MASK
+		and	immval, LOC_MASK
+		andn	locptra, LOC_MASK
 		or	locptra, immval
 		sets	addptra, rs1
 		mov	opptr, #locptra
@@ -544,8 +544,11 @@ signmask
 		long	0
 		
 LOC_MASK
-AUGPTR_MASK
 		long	$000FFFFF
+dirinstr
+		dirl	0
+testbit_instr
+		test	0-0, #1 wc
 
 sysinstr
 illegalinstr
@@ -566,9 +569,9 @@ decodei
 		mov	rs1, opcode
 		shr	rs1, #15
 		and	rs1, #$1f
-		mov	funct3, opcode
-		shr	funct3,#12
-		and	funct3,#7
+		mov	func3, opcode
+		shr	func3,#12
+		and	func3,#7
 		mov	rd, opcode
 		shr	rd, #7
 	_ret_	and	rd, #$1f
@@ -642,7 +645,7 @@ imp_jalr
 ''   beq rs1, rs2, immval
 '' the immediate is encoded a bit oddly, with parts where
 '' rd would be
-'' rather than using a dispatch table, we decode the funct3
+'' rather than using a dispatch table, we decode the func3
 '' bits directly
 '' the bits are abc
 '' where "a" selects for equal (0) or lt (1) (for us, Z or C flag)
@@ -691,61 +694,6 @@ absjump
 condbranch
 		jmp	#hub_condbranch
 
-		''
-		'' issue a conditional branch to the value in
-		'' "immval"
-		'' cmp_flag has the P2 flags to use for the condition
-		'' ($F0000000 for unconditional branch)
-		''
-issue_branch_cond		
-		'' BEWARE! ptrb has stepped up by 4, so we need to
-		'' adjust accordingly
-		sub	immval, #4
-
-		mov	cache_offset, immval
-		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
-		'' is it in the same cache line?
-		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
-	if_ae	jmp    	#normal_branch
-
-		'' yes: prepare a conditional jump here
-		'' recall that the cache line starts with a jump table
-		'' that maps RV32 instructions to their P2 equivalents
-		shr	cache_offset, #2
-
-		' make immval point to the jump table entry
-		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
-		add	immval, cache_offset
-#ifdef ALWAYS
-		'' optimization: see if we've already emitted the jump
-		'' we're jumping to; if so, we can grab it from the
-		'' jump table and skip a level of indirection
-		'' basically this menas backwards branches go faster
-		'' if (immval - jmptabptr < 0, we've already made the jump
-		cmp	immval, jmptabptr wcz
-	if_ae	jmp	#make_new_jump
-		rdlut	opdata, immval
-		jmp	#have_opcode
-#endif		
-make_new_jump
-		'' want to emit a conditional jump here
-		add	immval, CACHE_START
-		mov	opdata, absjump
-		or	opdata, immval
-have_opcode
-		andn	opdata, CONDMASK
-		or	opdata, cmp_flag
-		jmp	#emit_opdata_and_ret
-
-normal_branch
-		'' now write a conditional loc and ret
-		call	#emit_pc_immval
-		call	#reset_compare_flag	' change conditional flag of last instruction
-		mov	opdata, ret_instr
-		andn	opdata, CONDMASK
-		or	opdata, cmp_flag
-		jmp	#emit_opdata_and_ret
-		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -899,6 +847,16 @@ uart_recv_instr
 		mov	0-0, uartchar
 		
 '=========================================================================
+' custom instructions
+'=========================================================================
+pinsetinstr
+		jmp	#\hub_pinsetinstr
+wrpininstr
+		jmp	#\hub_wrpininstr
+rdpininstr
+		jmp	#\hub_rdpininstr
+
+'=========================================================================
 		'' VARIABLES
 temp		long 0
 dest		long 0
@@ -907,7 +865,8 @@ rd		long	0
 rs1		long	0
 rs2		long	0
 immval		long	0
-funct3		long	0
+func3		long	0
+func2		long	0
 opdata
 divflags	long	0
 
@@ -973,6 +932,21 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 		jmp	#\illegalinstr
+
+custom0tab
+		and	0, illegalinstr
+		and	0, illegalinstr
+		'' dirl, drvl, etc. only have dest fields, so
+		'' we cannot do the usual trick of putting the
+		'' address in the source field;
+		'' instead, we use AND and put the instruction bits
+		'' in the dest field
+		and	%001011000, pinsetinstr		' drvl
+		and	%001010000, pinsetinstr		' fltl
+		and	%001001000, pinsetinstr		' outl
+		and	%001000000, pinsetinstr		' dirl
+		wrpin	0, wrpininstr
+		and	0, rdpininstr
 end_of_tables
 
 		fit	$1f0
@@ -1003,13 +977,13 @@ hub_addi
 		jmp	#reg_imm
 
 hub_condbranch		
-		test	funct3, #%100 wz
+		test	func3, #%100 wz
 	if_z	mov	cmp_flag, #%1010	' IF_Z
 	if_nz	mov	cmp_flag, #%1100	' IF_C
-		test	funct3, #%001 wz
+		test	func3, #%001 wz
 	if_nz	xor	cmp_flag, #$f		' flip sense
 		shl	cmp_flag,#28		' get in high nibble
-		test	funct3, #%010 wz
+		test	func3, #%010 wz
 		'' write the compare instruction
 	if_z	mov	opdata,cmps_instr
 	if_nz	mov	opdata, cmp_instr
@@ -1028,7 +1002,61 @@ hub_condbranch
 		andn	immval, #1
 		add	immval, ptrb
 		jmp	#issue_branch_cond
-		
+		''
+		'' issue a conditional branch to the value in
+		'' "immval"
+		'' cmp_flag has the P2 flags to use for the condition
+		'' ($F0000000 for unconditional branch)
+		''
+issue_branch_cond		
+		'' BEWARE! ptrb has stepped up by 4, so we need to
+		'' adjust accordingly
+		sub	immval, #4
+
+		mov	cache_offset, immval
+		sub    	cache_offset, cache_line_first_pc  ' calculate immval - cache_line_start
+		'' is it in the same cache line?
+		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
+	if_ae	jmp    	#normal_branch
+
+		'' yes: prepare a conditional jump here
+		'' recall that the cache line starts with a jump table
+		'' that maps RV32 instructions to their P2 equivalents
+		shr	cache_offset, #2
+
+		' make immval point to the jump table entry
+		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
+		add	immval, cache_offset
+#ifdef ALWAYS
+		'' optimization: see if we've already emitted the jump
+		'' we're jumping to; if so, we can grab it from the
+		'' jump table and skip a level of indirection
+		'' basically this menas backwards branches go faster
+		'' if (immval - jmptabptr < 0, we've already made the jump
+		cmp	immval, jmptabptr wcz
+	if_ae	jmp	#make_new_jump
+		rdlut	opdata, immval
+		jmp	#have_opcode
+#endif		
+make_new_jump
+		'' want to emit a conditional jump here
+		add	immval, CACHE_START
+		mov	opdata, absjump
+		or	opdata, immval
+have_opcode
+		andn	opdata, CONDMASK
+		or	opdata, cmp_flag
+		jmp	#emit_opdata_and_ret
+
+normal_branch
+		'' now write a conditional loc and ret
+		call	#emit_pc_immval
+		call	#reset_compare_flag	' change conditional flag of last instruction
+		mov	opdata, ret_instr
+		andn	opdata, CONDMASK
+		or	opdata, cmp_flag
+		jmp	#emit_opdata_and_ret
+				
 hub_compile_auipc
 		mov	immval, opcode
 		and	immval, LUI_MASK
@@ -1069,11 +1097,11 @@ slt_fini
 		
 
 compile_csrw
-		getnib	funct3, immval, #2
+		getnib	func3, immval, #2
 		and	immval, #$1FF
 
 		'' check for COG I/O e.g. 7f4
-		cmp	funct3, #7 wz
+		cmp	func3, #7 wz
 	if_nz	jmp	#not_cog
 
 		'' first, emit a mov to get the old register value
@@ -1090,7 +1118,7 @@ skip_rd
 		jmp	#emit_opdata_and_ret
 not_cog
 		'' check for standard read-only regs
-		cmp	funct3, #$C wz
+		cmp	func3, #$C wz
 	if_nz	jmp	#not_standard
 
 		'' write to 0? that's a no-op
@@ -1108,7 +1136,7 @@ not_cog
 		'' here's where we do our non-standard registers
 		'' BC0 == UART
 not_standard
-		cmp	funct3, #$B wz	' is it one of ours?
+		cmp	func3, #$B wz	' is it one of ours?
 	if_nz	jmp	#illegalinstr
 	
 		cmp	immval, #$1C0 wz
@@ -1342,6 +1370,64 @@ internal_error
 		call	#ser_str
 .die		jmp	#.die
 
+hub_pinsetinstr
+		'' RISC-V has store value in rs2
+		'' adjust immediate for instruction format
+		andn	immval, #$1f
+		or	immval, rd
+		'' isolate the precise function
+		mov	func2, immval
+		shr	func2, #10
+		and	func2, #3
+		and	immval, #$1ff wz
+		'' do we have to output an immediate value?
+	if_nz	mov	dest, rs1	' use rs1 as the pin value
+	if_nz	jmp   	#.do_op
+		and	immval, LOC_MASK
+		andn	locptra, LOC_MASK
+		or	locptra, immval
+		sets	addptra, rs1  
+		mov	opptr, #locptra
+		call	#emit1
+		cmp	rs1, #0 wz    		' if rs1 is x0 we do not need the add
+	if_nz	mov	opptr, #addptra
+	if_nz	call	#emit1
+		mov	dest, #ptra	' use ptra as the pin value	
+.do_op
+		' now the actual pin instruction
+		' rs2 contains the value to write to the pin
+		' dest contains the pin number
+		' opdata contains a template like and yy, xx
+		shr	 opdata, #9 	     ' get instruction pattern into the src bits
+		and	 opdata, #$1ff
+		or	 opdata, dirinstr    ' set bits for dir
+		setd	 opdata, dest	     ' set pin to affect
+		
+		'' depending on func2 we have some different operations
+		'' 00 = store value 01 == store !value
+		'' 10 = store rnd   11 == invert existing value
+		'' low bit goes directly into instruction
+		test   func2, #%01 wc
+		muxc   opdata, #%01
+		'' check for using value; if we do use it then we may need to do a bit test
+		test	func2, #%10 wc     ' do we use the value
+	if_c	or	opdata, #%110	    ' if not, emit dirrnd/dirnot
+	if_c	jmp	#emit_opdata_and_ret
+		cmp	rs2, #0 wz	     ' is the value known to be 0?
+	if_z	jmp	#emit_opdata_and_ret
+
+		'' if the value isn't known, emit a test #1 wc to get the value into c
+		setd	testbit_instr, rs2	' test the bit in the rs2 register
+		mov	opptr, #testbit_instr
+		call	#emit1
+		or	opdata, #%10		' emit dirc/dirnc
+		jmp	#emit_opdata_and_ret
+
+hub_wrpininstr
+		jmp	#illegalinstr
+hub_rdpininstr
+		jmp	#illegalinstr
+		
 l2_tags
 		long	0[NUM_L2_TAGS]
 

@@ -542,6 +542,18 @@ signext_instr
 		muxc	0-0, 0-0
 signmask
 		long	0
+
+wrpin_table
+		wrpin	0, 0
+		wxpin	0, 0
+		wypin	0, 0
+		jmp	#\illegalinstr
+
+rdpin_table
+		wrc	0		' NOTE: S is nonzero, only D is used
+		rdpin	0, 0
+		rqpin	0, 0
+		akpin	0		' NOTE: D is 1, only S is used
 		
 LOC_MASK
 		long	$000FFFFF
@@ -549,6 +561,8 @@ dirinstr
 		dirl	0
 testbit_instr
 		test	0-0, #1 wc
+testpin_instr
+		testp	0-0 wc
 
 sysinstr
 illegalinstr
@@ -945,7 +959,7 @@ custom0tab
 		and	%001010000, pinsetinstr		' fltl
 		and	%001001000, pinsetinstr		' outl
 		and	%001000000, pinsetinstr		' dirl
-		wrpin	0, wrpininstr
+		and	0, wrpininstr
 		and	0, rdpininstr
 end_of_tables
 
@@ -1381,9 +1395,8 @@ hub_pinsetinstr
 		and	func2, #3
 		and	immval, #$1ff wz
 		'' do we have to output an immediate value?
-	if_nz	mov	dest, rs1	' use rs1 as the pin value
-	if_nz	jmp   	#.do_op
-		and	immval, LOC_MASK
+	if_z	mov	dest, rs1	' use rs1 as the pin value
+	if_z	jmp   	#.do_op
 		andn	locptra, LOC_MASK
 		or	locptra, immval
 		sets	addptra, rs1  
@@ -1424,9 +1437,61 @@ hub_pinsetinstr
 		jmp	#emit_opdata_and_ret
 
 hub_wrpininstr
-		jmp	#illegalinstr
+		'' RISC-V has store value in rs2
+		'' adjust immediate for instruction format
+		andn	immval, #$1f
+		or	immval, rd
+		'' upper 2 bits of immval control function
+		mov	func2, immval
+		shr	func2, #10
+		and	func2, #3
+		alts	func2, #wrpin_table
+		mov	opdata, 0-0
+		test	opdata, ##$3ffff wz	' if it's a jmp #illegalinstr
+	if_nz	jmp	#emit_opdata_and_ret
+		and	immval, #$1ff wz
+	if_z	mov	dest, rs1     ' use rs1 as the pin value directly
+	if_z	jmp	#.skip_imm
+		andn	locptra, LOC_MASK
+		or	locptra, immval
+		sets	addptra, rs1
+		mov	dest, #ptra		' use ptra as the pin value
+.skip_imm
+		setd	opdata, rs2
+		sets	opdata, dest
+		jmp	#emit_opdata_and_ret
+
+		''
+		'' read pin data instructions
+		''
 hub_rdpininstr
-		jmp	#illegalinstr
+		'' upper 2 bits of immval control function
+		mov	func2, immval
+		shr	func2, #10
+		and	func2, #3
+		alts	func2, #rdpin_table
+		mov	opdata, 0-0
+		and	immval, #$1ff wz
+		'' check for nonzero pin offset
+	if_z	jmp	#.skip_imm
+		andn	locptra, LOC_MASK
+		or	locptra, immval
+		sets	addptra, rs1
+		mov	rs1, #ptra		' use ptra as the pin value
+.skip_imm
+		' never write to x0
+		cmp	rd, #0 wz
+	if_z	mov	rd, #temp
+		' for func2 == 0 we need the testp instruction
+		cmp	func2, #0 wz
+	if_z	altd	testpin_instr, rs1
+	if_z	mov	opptr, #testpin_instr
+	if_z	call	#emit1
+		test	opdata, #$1ff wz
+	if_z	sets	opdata, rs1
+		test	opdata, ##($1ff<<9) wz	' check dest field
+	if_z	setd	opdata, rd
+		jmp	#emit_opdata_and_ret
 		
 l2_tags
 		long	0[NUM_L2_TAGS]

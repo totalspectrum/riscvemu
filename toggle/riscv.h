@@ -86,5 +86,56 @@
     ({                                                  \
         __asm__ __volatile__ (".insn sb CUSTOM_0, 2, x0, 0xC00(%0)" \
                               : : "r"(pin) );             \
+    })
+
+#define pinlow(pin) \
+    ({                                                  \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 2, x0, 0x000(%0)" \
+                              : : "r"(pin) );             \
+    })
+#define pinhigh(pin) \
+    ({                                                  \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 2, x0, 0x400(%0)" \
+                              : : "r"(pin) );             \
+    })
+
+#define dirl_(pin) \
+    ({                                                  \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 5, x0, 0x000(%0)" \
+                              : : "r"(pin) );             \
+    })
+#define dirh_(pin) \
+    ({                                                  \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 5, x0, 0x400(%0)" \
+                              : : "r"(pin) );             \
+    })
+
+#define pinwr(pin, value)                               \
+    ({                                                  \
+        unsigned long v = value;                         \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 6, %0, 0x000(%1)" \
+                              : : "r"(v), "r"(pin) );             \
+        v;                                                  \
+    })
+#define pinwx(pin, value)                             \
+    ({                                                  \
+        unsigned long v = value;                         \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 6, %0, 0x400(%1)" \
+                              : : "r"(v), "r"(pin) );             \
+        v;                                                  \
+    })
+#define pinwy(pin, value)                             \
+    ({                                                  \
+        unsigned long v = value;                         \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 6, %0, -0x800(%1)" \
+                              : : "r"(v), "r"(pin) );             \
+        v;                                                  \
+    })
+
+#define pinrdr(pin)                                     \
+    ({                                                  \
+        unsigned long v;                                \
+        __asm__ __volatile__ (".insn s 0x0b, 7, %0, 0x400(%1)" \
+                              : "=r"(v) : "r"(pin) );        \
         v;                                                  \
     })

@@ -9,7 +9,7 @@ CON
 #ifdef __P2__
   _clkfreq = 160_000_000
   _clkmode = $010007f8
-  PROGTOP = $42000
+  PROGTOP = $78000
 #else  
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
@@ -67,6 +67,7 @@ PUB demo | cmd, arg, c, x
   ser.start(31, 30, 0, 115200)
 #endif  
   ser.str(string("Processor emulation", 13, 10))
+  memorychecksum
   ser.str(string("starting emulation; base="))
   ser.hex(PROGBASE, 8)
   params[0] := @cmdreg
@@ -212,11 +213,13 @@ PRI memorychecksum | ptr, c1, c0, x
   c0 := (c1 << 16) + c0
   ser.hex(c0, 8)
   ser.str(string(" @"))
-  ser.hex(regs[32], 8)
+  ser.hex(regs[32])
+{{  
   ser.str(string(" #"))
-  ser.hex(regs[11], 8)	' a1
+  ser.hex(regs[11])	' a1
   ser.str(string(" %"))
-  ser.hex(regs[8], 8)	' s0
+  ser.hex(regs[8])	' s0
+}}
   ser.str(string(" ** memory checksum"))
   nl
   

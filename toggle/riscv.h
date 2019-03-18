@@ -84,7 +84,7 @@
 
 #define togglepin(pin) \
     ({                                                  \
-        __asm__ __volatile__ (".insn sb CUSTOM_0, 2, x0, 0xC00(%0)" \
+        __asm__ __volatile__ (".insn sb CUSTOM_0, 2, x0, -0x400(%0)" \
                               : : "r"(pin) );             \
     })
 

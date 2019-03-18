@@ -101,7 +101,7 @@ info2		long	0	' debug info
 info3		long	0	' debug info
 info4		long	0	' debug info
 rununtil	long	0
-stepcount	long	1	' 1 to start in single step mode
+stepcount	long	0	' 1 to start in single step mode
 #ifdef DEBUG
 debugtrace	long	0
 lastpc		long	0
@@ -878,20 +878,20 @@ get_pinval
 		rczr	funct2 wcz
     if_01	not	dest
     if_10	getrnd	dest
-    if_11	jmp	#get_old_pinval
+    if_11	call	#get_not_old_pinval
     		testb	dest, #0 wc
     		ret
 		
-get_old_pinval
-		test	rs1, #$20 wz	' bits 32-63?
-    if_nz	mov	dest, outb
-    if_z	mov	dest, outa
+get_not_old_pinval
+		test	rs1, #$20 wc	' bits 32-63?
+    if_c	mov	dest, outb
+    if_nc	mov	dest, outa
     		testb	dest, rs1 wc
     		wrnc	dest
-		ret
+    		ret
+
 drvpininstr
 		call	#get_pinval
-		drvl	#56
     		drvc	rs1
 		jmp	#nexti
 fltpininstr

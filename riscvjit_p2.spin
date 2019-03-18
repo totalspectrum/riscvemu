@@ -1484,7 +1484,7 @@ hub_rdpininstr
 	if_z	mov	rd, #temp
 		' for func2 == 0 we need the testp instruction
 		cmp	func2, #0 wz
-	if_z	altd	testpin_instr, rs1
+	if_z	setd	testpin_instr, rs1
 	if_z	mov	opptr, #testpin_instr
 	if_z	call	#emit1
 		test	opdata, #$1ff wz

@@ -932,7 +932,7 @@ custom1op
 		mov	dest, rs1
     		setq	rs3
 		coginit dest, rs2 wc
-    if_nc	neg	dest, #1
+    if_c	neg	dest, #1
 		jmp	#write_and_nexti
 not_coginit
 		jmp	#illegalinstr

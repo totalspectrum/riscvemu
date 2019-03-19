@@ -32,8 +32,8 @@ static char dat[] = {
 };
 int32_t pasmtest_start(pasmtest *self)
 {
-//  self->cogx = cognew((int32_t)(((int32_t *)&dat[0])), (int32_t)(self->mbox)) + 1;
-    self->cogx = coginit(3, (int32_t)(((int32_t *)&dat[0])), (int32_t)(self->mbox)) + 1;
+  self->cogx = cognew((int32_t)(((int32_t *)&dat[0])), (int32_t)(self->mbox)) + 1;
+//    self->cogx = coginit(3, (int32_t)(((int32_t *)&dat[0])), (int32_t)(self->mbox)) + 1;
   return self->cogx;
 }
 

@@ -343,8 +343,7 @@ reg_imm
 		' and with dest being the result
 		'
 		mov	dest, rd
-		cmp	rd, rs1 wz
-	if_nz	call	#emit_mov_rd_rs1
+		call	#emit_mov_rd_rs1
 		jmp	#emit_big_instr
 
 		'
@@ -748,6 +747,8 @@ emit_nop_pat
 ' emit a mov of rs1 to rd
 '
 emit_mov_rd_rs1
+		cmp	rd, rs1 wz
+	if_z	ret	    	' nothing to do if rd is rs1 already
 		sets	mov_pat,rs1
 		setd	mov_pat,rd
 		wrlut	mov_pat,cacheptr
@@ -820,8 +821,9 @@ csrrw
 
 coginit_pattern
 		setq	0-0
-		altr	0-0
-		coginit 0-0,0-0
+		coginit 0-0,0-0 wc
+	if_c	neg	0-0,0-0
+		
 calldebug
 		call	#\debug_print
 		long	$FFFFFFFF
@@ -1510,12 +1512,21 @@ hub_coginitinstr
 		mov	func2, immval
 		and	func2, #3 wz
 	if_nz	jmp	#illegalinstr
+
+		' if rd is 0, then use "temp" instead
+		cmp	rd, #0 wz
+	if_z	mov	rd, #temp
+
+		' mov rs1 to rd, maybe
+		call	#emit_mov_rd_rs1
+		
 		' immval is actually rs3, which will go into setq
-		shr	immval, #2 wz
+		shr	immval, #2
 		setd	coginit_pattern, immval
 		setd	coginit_pattern+1, rd
-		setd	coginit_pattern+2, rs1
-		sets	coginit_pattern+2, rs2
+		sets	coginit_pattern+1, rs2
+		setd	coginit_pattern+2, rd
+		sets	coginit_pattern+2, rd
 		mov	opptr, #coginit_pattern
 		jmp	#emit3
 

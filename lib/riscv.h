@@ -14,6 +14,7 @@
 #define WAITCYC 0xBC1
 #define DBGPRNT 0xBC2
 #define CNT  0xC00
+#define CNTH 0xC01
 
 #define X__(x) #x
 #define X_(x) X__(x)
@@ -62,6 +63,7 @@
 })
 
 #define getcnt() csr_read(CNT)
+#define getcnth() csr_read(CNTH)
 #define waitcnt(tim) csr_write(WAITCYC, tim)
 
 #define trigger_debug() csr_read(DBGPRNT)

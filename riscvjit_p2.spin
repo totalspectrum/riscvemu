@@ -15,7 +15,8 @@
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
       C00 - cycle counter
-
+      C01 - cycle counter high
+      
    Theory of operation:
      We pre-compile instructions and run them from a cache.
      Each RISC-V instruction maps to up to 4 PASM instructions.
@@ -139,8 +140,27 @@ memend		long	TOP_OF_MEM
 cache_line_first_pc long 0
 l1tags		long	0[NUM_L1_TAGS]
 
+cycleh		long	0
+lastcnt		long	0
+chfreq		long	$80000000
+
+		'' ISR for CT3 == 0
+ct3_isr
+		addct3	lastcnt, chfreq
+		testb	lastcnt, #31 wc
+		addx	cycleh, #0
+		reti3
+		
 		'' now start execution
 startup
+		'' set up interrupt for CT3 == 0
+		'' to measure cycle rollover
+		getct	lastcnt
+		and	lastcnt, chfreq
+		addct3	lastcnt, chfreq
+		mov   IJMP3, #ct3_isr
+		setint3	#3   '' ct3
+		
 ''
 '' set the pc to ptrb
 '' this is the main loop, basically; it's entered with
@@ -758,54 +778,6 @@ mov_pat		mov	0,0
 CONDMASK	long	$f0000000
 
 '=========================================================================
-' MATH ROUTINES
-'=========================================================================
-imp_mul
-		qmul	rs1, rs2
-    _ret_	getqx	rd
-
-imp_muluh
-		qmul	rs1, rs2
-    _ret_	getqy	rd
-
-    		'' calculate rs1 / rs2
-imp_divu
-		tjz	rs2, #div_by_zero
-		setq	#0
-		qdiv	rs1, rs2
-	_ret_	getqx	rd
-
-
-div_by_zero
-	_ret_	neg	rd, #1
-
-imp_remu
-		tjz	rs2, #rem_by_zero
-		setq	#0
-		qdiv	rs1, rs2
-	_ret_	getqy	rd
-		
-rem_by_zero
-	_ret_	mov	rd, rs1
-
-imp_rem
-		mov	divflags, rs1	' remainder should have sign of rs1
-		abs	rs1, rs1
-		abs	rs2, rs2
-		call	#imp_remu
-		testb	divflags, #31 wc
-	_ret_	negc	rd
-imp_div
-		mov	divflags, rs1
-		xor	divflags, rs2
-		abs	rs1,rs1
-		abs	rs2,rs2
-		call	#imp_divu
-		testb	divflags, #31 wc	' check sign
-	_ret_	negc	rd
-
-
-'=========================================================================
 ' system instructions
 '=========================================================================
 
@@ -816,7 +788,7 @@ imp_div
 ''    op  <reg>, rs1
 ''
 csrrw
-		jmp	#\compile_csrw
+		jmp	#\hub_compile_csrw
 
 
 coginit_pattern
@@ -827,9 +799,10 @@ coginit_pattern
 		
 calldebug
 		call	#\debug_print
-		long	$FFFFFFFF
-getct_instr
+getct_pat
 		getct	0-0
+getcth_pat
+		mov	0-0, cycleh
 waitcnt_instr
 		addct1 0-0, #0
 		waitct1
@@ -961,6 +934,53 @@ end_of_tables
 ''
 '' some lesser used routines that can go in HUB memory
 ''
+'=========================================================================
+' MATH ROUTINES
+'=========================================================================
+imp_mul
+		qmul	rs1, rs2
+    _ret_	getqx	rd
+
+imp_muluh
+		qmul	rs1, rs2
+    _ret_	getqy	rd
+
+    		'' calculate rs1 / rs2
+imp_divu
+		tjz	rs2, #div_by_zero
+		setq	#0
+		qdiv	rs1, rs2
+	_ret_	getqx	rd
+
+
+div_by_zero
+	_ret_	neg	rd, #1
+
+imp_remu
+		tjz	rs2, #rem_by_zero
+		setq	#0
+		qdiv	rs1, rs2
+	_ret_	getqy	rd
+		
+rem_by_zero
+	_ret_	mov	rd, rs1
+
+imp_rem
+		mov	divflags, rs1	' remainder should have sign of rs1
+		abs	rs1, rs1
+		abs	rs2, rs2
+		call	#imp_remu
+		testb	divflags, #31 wc
+	_ret_	negc	rd
+imp_div
+		mov	divflags, rs1
+		xor	divflags, rs2
+		abs	rs1,rs1
+		abs	rs2,rs2
+		call	#imp_divu
+		testb	divflags, #31 wc	' check sign
+	_ret_	negc	rd
+
 
 		'
 		' handle addi instruction specially
@@ -1117,7 +1137,7 @@ slt_fini
 		jmp	#emit1		' return from there to our caller
 		
 
-compile_csrw
+hub_compile_csrw
 		getnib	func3, immval, #2
 		and	immval, #$1FF
 
@@ -1148,12 +1168,19 @@ not_cog
 
 		'' $c00 == mcount (cycles counter)
 		cmp	immval, #0 wz
-	if_nz	jmp	#illegalinstr
+	if_nz	jmp	#not_mcount
 
-		mov	opdata, getct_instr
+		mov	opdata, getct_pat
   		setd	opdata, rd
 		jmp	#emit_opdata_and_ret
-
+not_mcount
+		'' $c01 == cycleh (high cycle counter)
+		cmp	immval, #1 wz
+	if_nz	jmp	#illegalinstr
+		mov	opdata, getcth_pat
+		setd	opdata, rd
+		jmp	#emit_opdata_and_ret
+		
 		'' here's where we do our non-standard registers
 		'' BC0 == UART
 not_standard

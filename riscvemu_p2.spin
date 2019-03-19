@@ -106,7 +106,26 @@ debugtrace	long	0
 lastpc		long	0
 #endif
 
+cycleh		long	0
+lastcnt		long	$0
+chfreq		long	$80000000
+
+		'' ISR for CT rolling over
+ct3_isr
+		addct3	lastcnt, chfreq
+		testb	lastcnt, #31 wc
+		addx	cycleh, #0
+		reti3
+		
 emustart
+		'' set up interrupt for CT3 == 0
+		'' to measure cycle rollover
+		getct   lastcnt
+		and	lastcnt, chfreq
+		addct3	lastcnt, chfreq
+		mov   IJMP3, #ct3_isr
+		setint3	#3   '' ct3
+
 #ifdef USE_LUT_FOR_CODE
 		' load helper code into LUT
 		' LUT 00-7f is used for an opcode table
@@ -902,6 +921,11 @@ do_csr
 		getct	dest
 		jmp	#write_and_nexti
 not_timer
+		cmp	opcode, ##$C01 wz
+	if_nz	jmp	#not_timerh
+		mov	dest, cycleh
+		jmp	#write_and_nexti
+not_timerh
 		cmp	opcode, ##$BC0 wz
 	if_nz	jmp	#not_uart
 		'' is this a send or receive

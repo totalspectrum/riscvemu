@@ -15,6 +15,17 @@
 
 extern void iprintf(const char *, ...);
 
+uint64_t getcycles()
+{
+    uint32_t hi, lo, h2;
+again:
+    h2 = getcnth();
+    lo = getcnt();
+    hi = getcnth();
+    if (hi != h2) goto again;
+    return ((uint64_t)hi) << 32 | lo;
+}
+
 void main()
 {
     uint32_t cycles;
@@ -22,7 +33,8 @@ void main()
     uint32_t pin = 57;
     uint32_t inpin = 4;
     uint32_t x, y;
-
+    uint64_t llc;
+    
     iprintf("pin is: %08x\n", pin);
     cycles = getcnt();
 #ifdef USE_SMARTPIN
@@ -34,6 +46,8 @@ void main()
     pinwy(pin, incr);
     dirh_(pin);
     for(;;) {
+        llc = getcycles();
+        
         // set button low before reading
         pinlow(inpin);
         waitcnt(160000000 / 30 + getcnt());
@@ -41,7 +55,7 @@ void main()
         waitcnt(160000000 / 10000 + getcnt());
         y = getpin(inpin);
         x = csr_read(INA);
-        iprintf("x = %08x, y = %d\n", x, y);
+        iprintf("cycles = %x:%08x x = %08x, y = %d\n", (uint32_t)(llc >> 32), (uint32_t)llc, x, y);
         waitcnt(getcnt() + 80000000);
     }
 #else    

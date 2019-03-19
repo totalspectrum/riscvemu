@@ -34,8 +34,8 @@ start:
 	
 	# zero the bss
 	la	t0, _bssstart
-	# la	t1, _bssend
-	mv	t1, x2
+	la	t1, _bssend
+	#mv	t1, x2
 	beq	t0,t1,.endlp
 .lp:
 	sw	x0,0(t0)

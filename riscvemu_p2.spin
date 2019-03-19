@@ -1,4 +1,3 @@
-#define USE_CORDIC
 '#define CHECK_WRITES
 #define DEBUG
 #define USE_LUT_FOR_CODE
@@ -612,28 +611,25 @@ imp_remu	call	#udiv
 		jmp	#write_and_nexti
 
 imp_rem
-		mov	divflags, #4
-		jmp	#dodiv
-imp_div
-		mov	divflags, #0
-dodiv
-		abs	dest, dest wc
-		muxc	divflags, #1
-		abs	rs2, rs2 wc
-		muxc	divflags, #2
+		mov	divflags, dest	' remainder should have sign of rs1
+		abs	dest, dest
+		abs	rs2, rs2
 		call	#udiv
-		test	divflags, #4 wc	' do we want remainder?
-	if_c	jmp	#dorem
-		test	divflags, #3 wc	' if both have same sign parity will be even, so c 0
-	if_c	neg	dest, dest
+		mov	dest, desth
+		testb	divflags, #31 wc
+	if_c	neg	dest
 		jmp	#write_and_nexti
-dorem
-		mov	desth, dest
-		test	divflags, #1 wc	' remainder has sign of rs1
-	if_c	neg	dest, dest
+		
+imp_div
+		mov	divflags, dest
+		xor	divflags, rs2
+		abs	dest, dest 
+		abs	rs2, rs2
+		call	#udiv
+		testb	divflags, #31 wc	' check sign
+		negc	dest
 		jmp	#write_and_nexti
 
-#ifdef USE_CORDIC
 umul
 		qmul	dest, rs2
 		getqx	dest
@@ -646,53 +642,6 @@ udiv
 		qdiv	dest, rs2	' dest/rs2
 		getqx	dest  		' quotient
     _ret_	getqy	desth		' remainder
-#else
-umul
-		'' multiply dest * rs2
-		'' result in dest,desth
-		mov	rs1, dest
-		mov	dest, #0
-		mov	desth, #0
-		mov	temp, #0
-umul_loop
-		shr	rs2, #1 wc, wz
-  if_nc		jmp	#umul_skip_add
-  		add	dest, rs1 wc
-		addx	desth, temp
-umul_skip_add
-  		add	rs1, rs1 wc
-		addx	temp, temp
-  if_nz		jmp	#umul_loop
-
-umul_ret	ret
-
-		'' calculate dest / rs2; result in dest, remainder in desth
-udiv
-		mov	rs1, dest
-		cmp	rs2, #0 wz
-  if_z		jmp	#div_by_zero
-
-		neg	desth, #1	' shift count
-		modcz	0,0 wc		' clear carry
-		
-  		' align divisor to leftmost bit
-.alignlp	
-		rcl	rs2, #1	 wc
-  if_nc		djnz	desth, #.alignlp
-		rcr	rs2, #1			' restore the 1 bit we just nuked
-		neg	desth, desth		' shift count (we started at -1 and counted down)
-
-  		mov	dest, #0
-.div_loop
-		cmpsub	rs1, rs2 wc
-		rcl	dest, #1
-		shr	rs2, #1
-		djnz	desth, #.div_loop
-		
-		mov	desth, rs1
-
-udiv_ret	ret
-#endif
 
 div_by_zero
 		neg	dest, #1

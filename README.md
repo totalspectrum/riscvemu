@@ -81,17 +81,18 @@ Emulated CSRs:
 ----------------------------------------------------------------------
 Custom instructions
 
-we use the custom0 opcode space:
-
-instructions:
-
-We add new instructions to the CUSTOM_0 and CUSTOM_1 name spaces
+We add new instructions to the CUSTOM_0 and CUSTOM_1 opcode spaces
 
 CUSTOM_0 is used for s or sb format (2 registers, 1 imm) (like many others in 00-07)
-CUSTOM_1 is used for r format (3 registers)
+   pin manipulation instructions
+   
+CUSTOM_1 is used for r format (3 or 4 registers) or i format (2 registers, 1 imm)
+   miscellaneous instructions
+
+### CUSTOM_0: Pin instructions
 
 CUSTOM_0, 0 and CUSTOM_0, 1 are reserved
-
+```
 drv val, offset_mode(pin)
    .insn sb  CUSTOM_0, 2, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
@@ -155,28 +156,35 @@ getpin res, offset_mode(pin)
 	 01: do rdpin into res
 	 10: do rqpin into res
 	 11: do akpin
-
+```
    
-CUSTOM_1:
+### CUSTOM_1: Misc control instructions
 
-'' 4 operand
+#### 4 operand instructions
+
+```
 coginit res, dval, addr, param
    .insn r CUSTOM_1, 0, 0, res, dval, addr, param
    addr is address of COG code to run, or 0 for RISC-V kernel
    param is parameter to pass (stack pointer for RISC-V kernel)
    dval is the D register value for coginit
 
+Other values for func2 are reserved.
+```
 
- ==========================================
- STREAMER:
- setdacs d0
- setxfrq d0
- xinit d, s
- xzero d, s
- xcont d, s
- getxacc result1, result2
- rdfast count, base
- rflong res
- rfword res
- rfbyte res
- 
+#### Direct immediate instructions
+
+These look like:
+```
+.insn i CUSTOM_1, 1, res, imm(dval)
+   generates P2 opcode 1101010 with D=res (initialized to dval) and S=imm
+   so for example to get current COG id into a0
+     .insn i CUSTOM_1, 1, a0, 0x001(a0) 
+   to stop a COG whose id is in a0:
+     .insn i CUSTOM_1, 1, a0, 0x03(a0)
+```
+
+If the high bit of the immediate is set, the WC flag is set on the generated instruction. If the second highest bit of the immediate is also set, then the final destination is written as -1 if C is set after the instruction executes.
+
+==========================================
+

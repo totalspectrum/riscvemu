@@ -37,7 +37,6 @@ CON
   we have 64 cache lines
 }
 '#define DEBUG_CACHE
-'#define NEVER_L2CACHE
 
 #ifdef DEBUG_CACHE
 ' bits per cache line
@@ -48,6 +47,8 @@ PC_CACHELINE_BITS = 6
 #else
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
+'TOTAL_CACHE_BITS = 8
+
 PC_CACHELINE_BITS = 7
 'PC_CACHELINE_BITS = 6
 #endif
@@ -219,9 +220,6 @@ recompile
 		
 		cmp    ptrb, temp wz
 	if_nz	jmp    #need_compile
-#ifdef NEVER_L2CACHE
-		jmp	#need_compile
-#endif		
 		setd   .rdcmd, cacheptr
 		'' read from the L2 cache
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
@@ -398,6 +396,7 @@ noaltr
 		sets	opdata, rs2
 		setd  	opdata, rs1
 emit_opdata_and_ret
+emit_opdata
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
 
@@ -447,6 +446,11 @@ sltfunc
 
 sltfunc_pat
 		wrc	0-0
+wrnegc_pat
+  if_c		neg	0-0, #1
+
+hubset_pat
+		hubset	0
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
@@ -1064,11 +1068,7 @@ issue_branch_cond
 		' make immval point to the jump table entry
 		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		add	immval, cache_offset
-#ifdef FIXME
-		mov	info1, immval
-		call	#ser_hex
-		call	#ser_nl
-#else
+
 		'' optimization: see if we've already emitted the jump
 		'' we're jumping to; if so, we can grab it from the
 		'' jump table and skip a level of indirection
@@ -1078,7 +1078,7 @@ issue_branch_cond
 	if_ae	jmp	#make_new_jump
 		rdlut	opdata, immval
 		jmp	#have_opcode
-#endif		
+
 make_new_jump
 		'' want to emit a conditional jump here
 		add	immval, CACHE_START
@@ -1536,17 +1536,6 @@ hub_rdpininstr
 		jmp	#emit_opdata_and_ret
 		
 hub_coginitinstr
-#ifdef FIXME
-		mov	info1, immval
-		call	#ser_hex
-		mov	info1, rs2
-		call	#ser_hex
-		mov	info1, rs1
-		call	#ser_hex
-		mov	info1, rd
-		call	#ser_hex
-		call	#ser_nl
-#endif
 		shr	immval, #5	' skip over rs2
 		mov	func2, immval
 		and	func2, #3 wz
@@ -1567,8 +1556,29 @@ hub_coginitinstr
 		mov	opptr, #coginit_pattern
 		jmp	#emit4
 
+		''
+		'' the single destination instructions all look like
+		'' hubset, but have varying low (S) bits
+		''
 hub_singledestinstr
-		jmp	#illegalinstr
+		cmp	rd, #0	wz
+	if_z	mov	rd, #temp
+		call	#emit_mov_rd_rs1
+		mov	opdata, hubset_pat
+		sets	opdata, immval	' set the S bits
+		setd	opdata, rd
+
+		' high 3 bits of immediate value have various meanings:
+		'  bit 31: set WC flag in instruction
+		'  bit 30: if C set, write -1 to register
+		testb	immval, #31 wc	' check for WC flag
+		bitc	opdata, #WC_BITNUM ' write it into the instruction
+		call	#emit_opdata
+		testb	immval, #30 wc
+	if_nc	ret
+		mov	opdata, wrnegc_pat
+		setd	opdata, rd
+		jmp	#emit_opdata_and_ret
 		
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 		'' code for doing compilation

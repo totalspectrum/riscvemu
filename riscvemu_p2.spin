@@ -789,6 +789,7 @@ watchaddr	long 0  '$79f18 + (4*13)
 rd		long	0
 rs1		long	0
 rs2		long	0
+rs3		long	0
 funct3		long	0
 funct2		long	0
 divflags	long	0
@@ -908,26 +909,30 @@ outpininstr
 		jmp	#nexti
 custom1op
 		call	#decodeall
-		shr	opcode, #25	' funct7
+		mov	info1, opcode
+		mov	info2, #$ff
 		cmp	funct3, #0 wz
-    if_nz	jmp	#illegalinstr
+    if_nz	jmp	#not_coginit
     		alts	rs1, #x0
 		mov	rs1, 0-0
 		alts	rs2, #x0
 		mov	rs2, 0-0
-		cmp	opcode, #0 wz
-    if_nz	jmp	#not_coginit
-
-    		sar	opcode, #20
-    		mov	funct2, opcode
-		and	funct2, #3	wz
+		mov	funct2, opcode
+		shr	funct2, #25
+		mov	rs3, funct2
+		shr	rs3, #2
+		and	funct2, #3 wz
+		mov	info4, rs3
+		mov	info3, funct2
+		mov	info2, #$ee
     if_nz	jmp	#illegalinstr
-		shr	opcode, #2	' this is actually rs3
-		alts	opcode, #x0
-		mov	opcode, 0-0
-    		setq	opcode
+
+		alts	rs3, #x0
+		mov	rs3, 0-0
 		mov	dest, rs1
-		coginit dest, rs2
+    		setq	rs3
+		coginit dest, rs2 wc
+    if_nc	neg	dest, #1
 		jmp	#write_and_nexti
 not_coginit
 		jmp	#illegalinstr

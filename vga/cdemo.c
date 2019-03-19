@@ -1,27 +1,14 @@
 // C demo for VGA text objects
 #define  VGA_BASEPIN 48
 
-//
-// sys/p2es_clock.h calculates clock mode settings
-// to achieve a target speed of P2_TARGET_MHZ, and
-// places the final clock setting and actual frequency
-// in _SETFREQ and _CLOCKFREQ respectively
-//
-#define P2_TARGET_MHZ 200
 #include <string.h>
 
 // include the Spin object
-#ifdef __FLEXC__NOT__
-#include <sys/p2es_clock.h>
-struct __using("vgatext.spin2") vga;
-#define vga_rows vga.rows
-#define vga_cols vga.cols
-#define vga_tx(c) vga.tx(c)
-#define vga_dec(c) vga.dec(c)
-#define vga_str(s) vga.str(s)
-#else
-#include "p2es_clock.h"
 #include "vgatext.h"
+
+#ifdef __riscv
+#include <stdio.h>
+#endif
 
 vgatext vga;
 #define vga_rows VGATEXT_ROWS
@@ -30,7 +17,6 @@ vgatext vga;
 #define vga_tx(c) vgatext_tx(&vga, c)
 #define vga_dec(c) vgatext_dec(&vga, c)
 #define vga_str(s) vgatext_str(&vga, s)
-#endif
 
 #define ESC 27
 //#define ESC 'E' // for debugging
@@ -67,18 +53,17 @@ static void center(const char *msg) {
     vga_str(msg);
 }
 
-#ifdef __GNUC__
-static void clkset(unsigned mode, unsigned freq)
-{
-}
-#endif
-
 // main routine
 void main()
 {
     int i;
+#ifndef __riscv    
     clkset(_SETFREQ, _CLOCKFREQ);
-    vga_start(VGA_BASEPIN);
+#endif    
+    i = vga_start(VGA_BASEPIN);
+#ifdef __riscv
+    iprintf("vga_start returned %d\n", i);
+#endif
 
     starline();
     for (i = 1; i < vga_rows-1; i++) {

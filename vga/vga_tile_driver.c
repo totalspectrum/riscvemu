@@ -11,7 +11,11 @@ Runs in its own COG. See README.txt for theory of operation.
 Quick configuration: change basepin to the appropriate base pin for your VGA setup.
 
  */
+#ifdef __riscv
+#include "../lib/riscv.h"
+#else
 #include <propeller.h>
+#endif
 #include "vga_tile_driver.h"
 
 #ifdef __GNUC__

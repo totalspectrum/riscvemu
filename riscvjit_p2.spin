@@ -848,7 +848,8 @@ rdpininstr
 		jmp	#\hub_rdpininstr
 coginitinstr
 		jmp	#\hub_coginitinstr
-
+singledestinstr
+		jmp	#\hub_singledestinstr
 '=========================================================================
 		'' VARIABLES
 temp		long 0
@@ -942,7 +943,7 @@ custom0tab
 		and	0, rdpininstr
 custom1tab
 		and	0, coginitinstr
-		and	0, illegalinstr
+		and	0, singledestinstr
 		and	0, illegalinstr
 		and	0, illegalinstr
 		and	0, illegalinstr
@@ -1505,6 +1506,7 @@ hub_rdpininstr
 		jmp	#emit_opdata_and_ret
 		
 hub_coginitinstr
+		shr	immval, #5	' skip over rs2
 		mov	func2, immval
 		and	func2, #3 wz
 	if_nz	jmp	#illegalinstr
@@ -1516,6 +1518,9 @@ hub_coginitinstr
 		sets	coginit_pattern+2, rs2
 		mov	opptr, #coginit_pattern
 		jmp	#emit3
+
+hub_singledestinstr
+		jmp	#illegalinstr
 		
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 		'' code for doing compilation

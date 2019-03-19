@@ -20,7 +20,8 @@ void main()
     uint32_t cycles;
     uint32_t freq = 160000000;
     uint32_t pin = 57;
-    uint32_t x;
+    uint32_t inpin = 4;
+    uint32_t x, y;
 
     iprintf("pin is: %08x\n", pin);
     cycles = getcnt();
@@ -32,8 +33,17 @@ void main()
     pinwx(pin, bitperiod);
     pinwy(pin, incr);
     dirh_(pin);
-    for(;;)
-        ;
+    for(;;) {
+        // set button low before reading
+        pinlow(inpin);
+        waitcnt(160000000 / 30 + getcnt());
+        dirl_(inpin);
+        waitcnt(160000000 / 10000 + getcnt());
+        y = getpin(inpin);
+        x = csr_read(INA);
+        iprintf("x = %08x, y = %d\n", x, y);
+        waitcnt(getcnt() + 80000000);
+    }
 #else    
     for(;;) {
         pinlow(pin); //setpin(pin, 0);

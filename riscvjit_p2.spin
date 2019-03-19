@@ -1,4 +1,4 @@
-o{{
+{{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017-2019 Total Spectrum Software Inc.
    Terms of use: MIT License (see the file LICENSE.txt)
@@ -36,16 +36,19 @@ CON
   we have 64 cache lines
 }
 '#define DEBUG_CACHE
-
+'#define NEVER_L2CACHE
 
 #ifdef DEBUG_CACHE
 ' bits per cache line
-TOTAL_CACHE_BITS = 5
-PC_CACHELINE_BITS = 4
+TOTAL_CACHE_BITS = 7
+PC_CACHELINE_BITS = 6
+'TOTAL_CACHE_BITS = 9
+'PC_CACHELINE_BITS = 7
 #else
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
-PC_CACHELINE_BITS = 7
+'PC_CACHELINE_BITS = 7
+PC_CACHELINE_BITS = 6
 #endif
 L1_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
@@ -85,9 +88,6 @@ CON
   BAUD = 230_400
   
   
-PUB start(params)
-  coginit(0, @enter, 0)
-
 DAT
 		org 0
 		'' initial COG boot code
@@ -97,8 +97,8 @@ DAT
 		' config area
 		orgh $10
 		long	   0
-		long	   160_000_000	' frequency
-		long	   $010007f8	' clock mode
+		long	   23_000_000	' frequency
+		long	   0		' clock mode
 		long	   230_400	' baud
 
 		orgh $400
@@ -110,8 +110,8 @@ x2		long	TOP_OF_MEM
 x3		nop
 
 x4		loc	ptrb, #\BASE_OF_MEM
-x5		nop
-x6		hubset	#0
+x5		rdlong	temp, #$18	' get old clock mode
+x6		hubset	temp
 x7		mov	x1, #$1ff	' will count down
 
 		' initialize LUT memory
@@ -146,7 +146,7 @@ startup
 '' this is the main loop, basically; it's entered with
 '' ptrb holding the address we want for the pc. We check
 '' to see if that's in L1 cache, and if it is then we just jump
-'' into the cache in LUT. Otherwise we go to do_recompile, which
+'' into the cache in LUT. Otherwise we go to "recompile", which
 '' checks the L2 cache and if it's not in there compiles the
 '' cache line at ptrb
 ''
@@ -199,12 +199,14 @@ recompile
 		
 		cmp    ptrb, temp wz
 	if_nz	jmp    #need_compile
-
+#ifdef NEVER_L2CACHE
+		jmp	#need_compile
+#endif		
 		setd   .rdcmd, cacheptr
 		'' read from the L2 cache
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
 		add	l2idx, l2_cache_base
-#ifdef DEBUG_CACHE
+#ifdef DEBUG_CACHE_DUMP
 		call	#l2_read_debug
 #endif		
 		setq2	#PC_CACHELINE_LEN-1
@@ -215,54 +217,11 @@ recompile
 		rdlong	cacheptr, #0
 		call	#dump_cache
 #endif		
-		add	ptrb, #PC_CACHELINE_LEN
-		ret
+	_ret_	add	ptrb, #PC_CACHELINE_LEN
 		
 need_compile
-		wrlong	ptrb, l2ptr
-		mov	init_cacheptr, cacheptr
+		call	#hub_compile
 		
-		'' now compile into cacheptr in the LUT
-		'' ptrb is pointing at the start of the HUB cache line
-		mov	cachecnt, #PC_CACHELINE_LEN/4
-
-		'' first thing in the cache line is a jump table
-		'' 1 for each instruction, which lets us jump into
-		'' the middle of the cache line
-		'' we build that as we go, so just skip cacheptr over it
-		'' for now
-		mov    jmptabptr, cacheptr
-		add    cacheptr, cachecnt
-cachelp
-		'' update the jump table
-		mov	opdata, absjump
-		or	opdata, cacheptr
-		or	opdata, CACHE_START
-		wrlut	opdata, jmptabptr
-		add	jmptabptr, #1
-
-		' fetch the actual RISC-V opcode
-		rdlong	opcode, ptrb++
-		test	opcode, #3 wcz
-  if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
-  		call	#decodei
-		mov	temp, opcode
-		shr	temp, #2
-		and	temp, #$1f
-		alts	temp, #optable
-		mov	opdata, 0-0		' fetch long from table
-		test	opdata, CONDMASK wz	' are upper bits 0?
-	if_nz	jmp	#getinstr
-		alts	func3, opdata		' do table indirection
-		mov	opdata, 0-0
-getinstr
-		mov	temp, opdata
-		and	temp, #$1ff
-		call	temp			' compile the instruction
-done_instruction
-		djnz	cachecnt, #cachelp
-		
-		'' finish the cache line
 finish_cache_line
 		setd	.l2wrcmd, init_cacheptr ' prepare for eventual copy to L2 cache
 
@@ -287,15 +246,14 @@ finish_cache_line
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
 		add	l2idx, l2_cache_base
 		
-#ifdef DEBUG_CACHE
+#ifdef DEBUG_CACHE_DUMP
 		call	#l2_write_debug
 #endif
 
 		'' setq2 + wrlong writes multiple words from LUT to HUB
 		setq2	#PC_CACHELINE_LEN-1
 .l2wrcmd
-		wrlong	0-0, l2idx		' set to init_cacheptr
-		ret
+	_ret_	wrlong	0-0, l2idx		' set to init_cacheptr
 		
 do_illegalinstr
 		call	#illegalinstr
@@ -563,7 +521,7 @@ testbit_instr
 		test	0-0, #1 wc
 testpin_instr
 		testp	0-0 wc
-
+		
 sysinstr
 illegalinstr
 		mov	immval, ptrb
@@ -600,14 +558,18 @@ LUI_MASK	long	$fffff000
 {{
    template for jal rd, offset
 imp_jal
-		loc	ptrb, #\newpc   (compile time pc+offset)
-    _ret_	mov	rd, ##retaddr  (compile time pc+4)
+		mov	rd, ##retaddr  (compile time pc+4)
+	_ret_	loc	ptrb, #\newpc   (compile time pc+offset)
 
    template for jalr rd, rs1, offset
 imp_jalr
+		mov	rd, ##retaddr  (compile time pc+4)
 		loc	ptrb, #\offset
-		add	ptrb, rs1
-   _ret_	mov	rd, ##retaddr  (compile time pc+4)
+	_ret_	add	ptrb, rs1
+
+   if offset == 0 (common for ret) use
+               mov      rd, ##retaddr
+	_ret_  mov      ptrb, rs1
 }}
 
 
@@ -637,12 +599,18 @@ skip_write
 jalr
 		' set up offset in ptrb
 		and	immval, LOC_MASK wz
-	if_nz	jmp	#illegalinstr    '' FIXME DEBUG CODE
+	if_nz	jmp	#.need_offset
+		sets	imp_jalr_nooff, rs1
+		mov	opptr, #imp_jalr_nooff
+		call	#emit1
+		jmp	#.load_retaddr
+.need_offset
 		andn	imp_jalr, LOC_MASK
 		or	imp_jalr, immval
 		sets	imp_jalr+1, rs1
 		mov	opptr, #imp_jalr
 		call	#emit2
+.load_retaddr
 		' now emit the final load
 		mov	immval, ptrb	' get return address
 		mov	dest, rd
@@ -654,6 +622,8 @@ jalr
 imp_jalr
 		loc	ptrb, #\(0-0)
 		add	ptrb, 0-0
+imp_jalr_nooff
+		mov	ptrb, 0-0
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' conditional branch
 ''   beq rs1, rs2, immval
@@ -848,6 +818,9 @@ csrrw
 		jmp	#\compile_csrw
 
 
+calldebug
+		call	#\debug_print
+		long	$FFFFFFFF
 getct_instr
 		getct	0-0
 waitcnt_instr
@@ -1032,7 +1005,18 @@ issue_branch_cond
 		'' is it in the same cache line?
 		cmp    	cache_offset, #PC_CACHELINE_LEN wcz
 	if_ae	jmp    	#normal_branch
-
+#ifdef FIXME
+		'' fixme: this is very strange
+		'' with some cache configurations this code
+		'' fails??? to get it to work we need
+		'' to always jmp to #normal_branch??
+		mov	info1, cmp_flag
+		call	#ser_hex
+		mov	info1, immval
+		call	#ser_hex
+		mov	info1, cache_line_first_pc
+		call	#ser_hex
+#endif
 		'' yes: prepare a conditional jump here
 		'' recall that the cache line starts with a jump table
 		'' that maps RV32 instructions to their P2 equivalents
@@ -1041,11 +1025,15 @@ issue_branch_cond
 		' make immval point to the jump table entry
 		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		add	immval, cache_offset
-#ifdef ALWAYS
+#ifdef FIXME
+		mov	info1, immval
+		call	#ser_hex
+		call	#ser_nl
+#else
 		'' optimization: see if we've already emitted the jump
 		'' we're jumping to; if so, we can grab it from the
 		'' jump table and skip a level of indirection
-		'' basically this menas backwards branches go faster
+		'' basically this means backwards branches go faster
 		'' if (immval - jmptabptr < 0, we've already made the jump
 		cmp	immval, jmptabptr wcz
 	if_ae	jmp	#make_new_jump
@@ -1182,6 +1170,11 @@ not_uart
 		jmp	#emit2		' return from there
 
 not_wait
+		cmp	immval, #$1C2 wz
+	if_nz	jmp	#not_debug
+		mov	opptr, #calldebug
+		jmp	#emit1
+not_debug
 		jmp	#illegalinstr
 
 		'' print single character in uartchar
@@ -1208,6 +1201,8 @@ ser_rx
 		'' a startup message
 ser_init
 		' set system clock
+		hubset	#0
+		nop
 		hubset	##CLOCK_MODE
 		waitx	##20_000_000/100  ' longer than necessary
 		hubset	##CLOCK_MODE+3
@@ -1259,13 +1254,6 @@ illegal_instr_error
 die
 		jmp	#die
 
-#ifdef DEBUG_CHECKS
-badcache
-		loc	ptra, #\cache_error_msg
-		call	#ser_str
-.lp		jmp	#.lp
-#endif
-
 		' create a checksum of memory
 		' (info1, info2) are checksum
 		' pa = start of mem block
@@ -1311,11 +1299,11 @@ debug_print
 boot_msg
 		byte	"RiscV P2 JIT", 13, 10, 0
 chksum_msg
-		byte    "=memory chksum", 10, 0
+		byte    "=memory chksum", 13, 10, 0
 illegal_instruction_msg
 		byte	"*** ERROR: illegal instruction at: ", 0
 cache_error_msg
-		byte	"*** JIT ERROR: bad cache line ending", 10, 13, 0
+		byte	"*** JIT ERROR: bad cache line ending", 13, 10, 0
 hex_buf
 		byte  0[8], 0
 
@@ -1324,8 +1312,22 @@ reg_buf
 		long 0[32]
 reg_buf_end
 
+dump_cache
+		mov	pa, #0		' cache ptr
+		mov	info3, ##(1<<TOTAL_CACHE_BITS)
+.dcache1
+		test	pa, #15 wz
+	if_z	call	#ser_nl
+		rdlut	info1, pa
+		add	pa, #1
+		call	#ser_hex
+		djnz	info3, #.dcache1
+		call	#ser_nl
+		ret
+
 #ifdef DEBUG_CACHE
 l2_read_debug
+#ifdef NEVER
 		call	#ser_nl
 		mov	uartchar, #"R"
 		call	#ser_tx
@@ -1339,20 +1341,8 @@ l2_read_debug
 		call	#ser_hex
 		mov	info1, #PC_CACHELINE_LEN-1
 		call	#ser_hex
+#endif		
 		ret
-dump_cache
-		mov	pa, #0		' cache ptr
-		mov	info3, #(1<<TOTAL_CACHE_BITS)
-.dcache1
-		test	pa, #15 wz
-	if_z	call	#ser_nl
-		rdlut	info1, pa
-		add	pa, #1
-		call	#ser_hex
-		djnz	info3, #.dcache1
-		call	#ser_nl
-		ret
-
 l2_write_debug
 		call	#ser_nl
 		mov	uartchar, #"W"
@@ -1365,7 +1355,9 @@ l2_write_debug
 		call	#ser_hex
 		mov	info1, l2idx
 		call	#ser_hex
+#ifdef NEVER		
 		call	#dump_cache
+#endif		
 #endif
 
 ser_nl
@@ -1377,6 +1369,8 @@ ser_nl
 internal_error
 		mov	info1, ptrb
 		sub	info1, #PC_CACHELINE_LEN
+		call	#ser_hex
+		mov	info1, init_cacheptr
 		call	#ser_hex
 		mov	info1, cacheptr
 		call	#ser_hex
@@ -1484,14 +1478,68 @@ hub_rdpininstr
 	if_z	mov	rd, #temp
 		' for func2 == 0 we need the testp instruction
 		cmp	func2, #0 wz
-	if_z	setd	testpin_instr, rs1
-	if_z	mov	opptr, #testpin_instr
-	if_z	call	#emit1
+	if_nz	jmp	#.skip_testp
+		setd	testpin_instr, rs1
+		mov	opptr, #testpin_instr
+		call	#emit1
+.skip_testp
 		test	opdata, #$1ff wz
 	if_z	sets	opdata, rs1
 		test	opdata, ##($1ff<<9) wz	' check dest field
 	if_z	setd	opdata, rd
 		jmp	#emit_opdata_and_ret
+		
+
+		''
+		'' code for doing compilation
+		''
+hub_compile
+		wrlong	ptrb, l2ptr
+		mov	init_cacheptr, cacheptr
+		
+		'' now compile into cacheptr in the LUT
+		'' ptrb is pointing at the start of the HUB cache line
+		mov	cachecnt, #PC_CACHELINE_LEN/4
+
+		'' first thing in the cache line is a jump table
+		'' 1 for each instruction, which lets us jump into
+		'' the middle of the cache line
+		'' we build that as we go, so just skip cacheptr over it
+		'' for now
+		mov    jmptabptr, cacheptr
+		add    cacheptr, cachecnt
+cachelp
+		'' update the jump table
+		mov	opdata, absjump
+		or	opdata, cacheptr
+		or	opdata, CACHE_START
+		wrlut	opdata, jmptabptr
+		add	jmptabptr, #1
+
+		' fetch the actual RISC-V opcode
+		rdlong	opcode, ptrb++
+		test	opcode, #3 wcz
+  if_z_or_c	jmp	#do_illegalinstr		' low bits must both be 3
+  		call	#decodei
+		mov	temp, opcode
+		shr	temp, #2
+		and	temp, #$1f
+		alts	temp, #optable
+		mov	opdata, 0-0		' fetch long from table
+		test	opdata, CONDMASK wz	' are upper bits 0?
+	if_nz	jmp	#getinstr
+		alts	func3, opdata		' do table indirection
+		mov	opdata, 0-0
+getinstr
+		mov	temp, opdata
+		and	temp, #$1ff
+		call	temp			' compile the instruction
+done_instruction
+		djnz	cachecnt, #cachelp
+		
+		'' finish the cache line
+
+		ret
 		
 l2_tags
 		long	0[NUM_L2_TAGS]

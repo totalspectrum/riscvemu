@@ -213,12 +213,12 @@ PRI memorychecksum | ptr, c1, c0, x
   c0 := (c1 << 16) + c0
   ser.hex(c0, 8)
   ser.str(string(" @"))
-  ser.hex(regs[32])
+  ser.hex(regs[32], 8)
 {{  
   ser.str(string(" #"))
-  ser.hex(regs[11])	' a1
+  ser.hex(regs[11], 8)	' a1
   ser.str(string(" %"))
-  ser.hex(regs[8])	' s0
+  ser.hex(regs[8], 8)	' s0
 }}
   ser.str(string(" ** memory checksum"))
   nl

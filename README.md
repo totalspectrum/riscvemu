@@ -6,7 +6,7 @@ Terms of use: MIT License (see the file LICENSE.txt)
 An emulator for the RISC-V processor architecture, designed to run
 in a single Propeller COG. There's also a version for the Propeller 2.
 In fact the P2 version is the more up to date, and this document mostly
-discusses that, although
+discusses that.
 
 The instruction set emulated is RV32IM, mostly, except that the 64 bit
 multiplies are not yet implemented. The only standard CSR implemented on

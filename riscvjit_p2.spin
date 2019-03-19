@@ -171,6 +171,7 @@ startup
 '' cache line at ptrb
 ''
 set_pc
+		'' set the pc to ptrb
 		mov	cachepc, ptrb
 		and	cachepc, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		mov	cache_offset, ptrb
@@ -183,8 +184,7 @@ set_pc
 		
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		alts	tagidx, #l1tags	
-		mov	temp, 0-0
-		cmp	ptrb, temp wz
+		cmp	ptrb, 0-0 wz
 	if_z	add	ptrb, #PC_CACHELINE_LEN	' skip to start of next line
 	if_nz	call	#recompile
 		push	#set_pc

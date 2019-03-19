@@ -1,14 +1,20 @@
-RISC-V Emulators for Parallax Propeller and Propeller 2
+# RISC-V Emulators for Parallax Propeller and Propeller 2
+
 Copyright 2017-2019 Total Spectrum Software Inc.
 Terms of use: MIT License (see the file LICENSE.txt)
 
 An emulator for the RISC-V processor architecture, designed to run
 in a single Propeller COG. There's also a version for the Propeller 2.
+In fact the P2 version is the more up to date, and this document mostly
+discusses that, although
 
 The instruction set emulated is RV32IM, mostly, except that the 64 bit
-multiplies are not yet implemented. The only standard CSR implemented is
-the low 32 bits of the cycle counter (so rdcycle works, but rdcycleh does
-not). Some non-standard CSRs are used to access a UART emulation.
+multiplies are not yet implemented. The only standard CSR implemented on
+P1 is the low 32 bits of the cycle counter (so rdcycle works, but rdcycleh does
+not). On P2 the full 64 bit cycle counter is available.
+
+Some non-standard CSRs are used to access a UART emulation and to directly access
+propeller registers. These are different between P1 and P2.
 
 riscvemu.spin is the actual emulator (the guts are in PASM, of course)
 riscvemu_p2.spin is a P2 version of the emulator
@@ -26,13 +32,13 @@ The RISC-V binary should be linked to start at address 8192 (0x2000).
 See the Makefiles for examples of how to do this.
 
 To build, I suggest using the Makefiles in the various subdirectories.
-These produce two binaries, p1.binary and p2.binary, which are the
-downloadables for Propeller1 and Propeller2 respectively. You can use
-propeller-load or the Propeller Tool to load the p1.binary. On
-P2 I use Dave Hein's loadp2 program.
+These produce three binaries, p1.binary, p2.binary, and p2emu.binary.
+p1.binary is the P1 emulator. p2.binary is the P2 JIT version, and
+p2emu.binary is the P2 emulator version.
 
-The interface is pretty simple: the params array passed to the start
-method should contain:
+The interface to start up the emulator is pretty simple: the params
+array passed to the start method should contain:
+
 ```   
    params[0] = address of command register
    params[1] = base of emulated memory
@@ -66,22 +72,29 @@ The host should write 0 to the command register as an "ACK" to restart
 the RISC-V. When it does so, the registers will be re-read. If the
 `stepcount` field is non-zero then the emulated processor will step
 this many times before stopping again. If it is 0 it will run continuously.
-   
+
+The JIT compiler is much simpler, and does not have the debug interface. It's
+a pure PASM program and hence only requires one COG (the other emulators use
+two COGs, one for the debug stub and one for the Risc-V emulation).
+
 ---------------------------------------------------------------------
-Emulated CSRs:
+## Emulated CSRs:
 ```
-  C00 - cycle counter
+  C00 - cycle counter (low 32 bits)
+  C80 - cycle counter (high 32 bits) (P2 only)
   BC0 - uart register; bytes written here go to the serial port
         you can also read from it to read a byte (it returns -1 if
 	no byte is available yet)
   BC1 - wait register; if a value is written here we wait until the
         cycle counter matches it
+  BC2 - debug register, used for internal debug purposes
   7Fx - COG registers 1F0 - 1FF
 ```
 ----------------------------------------------------------------------
-Custom instructions
+## Custom instructions
 
-We add new instructions to the CUSTOM_0 and CUSTOM_1 opcode spaces
+On the P2, we add new instructions to the CUSTOM_0 and CUSTOM_1 opcode spaces (these are P2 only,
+the P1 emulator does not have them).
 
 CUSTOM_0 is used for s or sb format (2 registers, 1 imm) (like many others in 00-07)
    pin manipulation instructions
@@ -186,5 +199,5 @@ These look like:
 
 If the high bit of the immediate is set, the WC flag is set on the generated instruction. If the second highest bit of the immediate is also set, then the final destination is written as -1 if C is set after the instruction executes.
 
-==========================================
+
 

@@ -820,9 +820,10 @@ csrrw
 
 
 coginit_pattern
-		setq	0-0
-		coginit 0-0,0-0 wc
-	if_c	neg	0-0,0-0
+		mov	temp, 0-0	' rs1
+		setq	0-0   		' rs3
+		coginit temp,0-0 wc	' rs2
+		negc	0-0,temp 	' rd
 		
 calldebug
 		call	#\debug_print
@@ -1508,27 +1509,36 @@ hub_rdpininstr
 		jmp	#emit_opdata_and_ret
 		
 hub_coginitinstr
+#ifdef FIXME
+		mov	info1, immval
+		call	#ser_hex
+		mov	info1, rs2
+		call	#ser_hex
+		mov	info1, rs1
+		call	#ser_hex
+		mov	info1, rd
+		call	#ser_hex
+		call	#ser_nl
+#endif
 		shr	immval, #5	' skip over rs2
 		mov	func2, immval
 		and	func2, #3 wz
 	if_nz	jmp	#illegalinstr
 
+		' immval is actually rs3, which will go into setq
+		shr	immval, #2
+
 		' if rd is 0, then use "temp" instead
 		cmp	rd, #0 wz
 	if_z	mov	rd, #temp
 
-		' mov rs1 to rd, maybe
-		call	#emit_mov_rd_rs1
+		sets	coginit_pattern, rs1
+		setd	coginit_pattern+1, immval
+		sets	coginit_pattern+2, rs2
+		setd	coginit_pattern+3, rd
 		
-		' immval is actually rs3, which will go into setq
-		shr	immval, #2
-		setd	coginit_pattern, immval
-		setd	coginit_pattern+1, rd
-		sets	coginit_pattern+1, rs2
-		setd	coginit_pattern+2, rd
-		sets	coginit_pattern+2, rd
 		mov	opptr, #coginit_pattern
-		jmp	#emit3
+		jmp	#emit4
 
 hub_singledestinstr
 		jmp	#illegalinstr

@@ -14,6 +14,9 @@
 
 #ifdef DEBUG
 #include <stdio.h>
+#else
+#undef trigger_debug
+#define trigger_debug()
 #endif
 
 #define INLINE__ static inline
@@ -300,6 +303,8 @@ static char dat[] = {
 int32_t vgatext_start(vgatext *self, int32_t pinbase)
 {
   int32_t 	i, pclkscale, pclk, sysclk, x;
+
+  trigger_debug();
   // calculate clock frequency
   // pixel clock
   pclk = VGATEXT_PIXEL_CLOCK_FREQ;
@@ -338,7 +343,10 @@ int32_t vgatext_start(vgatext *self, int32_t pinbase)
   self->params[(i++)] = 33;
   // polarity (1 == negative)
   self->params[(i++)] = 3;
+
+  trigger_debug();
   x = vga_tile_driver_start(&self->vga, (int32_t)(self->params));
+  trigger_debug();
   vgatext_init_terminal(self);
   return x;
 }
@@ -749,9 +757,6 @@ void vgatext_num(vgatext *self, int32_t val, int32_t base, int32_t signflag, int
 {
   int32_t 	i, digit, r1, q1;
 
-#ifdef DEBUG
-  iprintf("vgatext_num: val=%d base=%d signflag=%d digitsneeded=%d\n", val, base, signflag, digitsneeded);
-#endif  
   // if signflag is nonzero, it indicates we should treat
   // val as signed; if it is > 1, it is a character we should
   // print for positive numbers (typically "+")

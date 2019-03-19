@@ -18,15 +18,7 @@ Quick configuration: change basepin to the appropriate base pin for your VGA set
 #endif
 #include "vga_tile_driver.h"
 
-#ifdef __GNUC__
 #define INLINE__ static inline
-#else
-#define INLINE__ static
-#define waitcnt(n) _waitcnt(n)
-#define coginit(id, code, par) _coginit((unsigned)(par)>>2, (unsigned)(code)>>2, id)
-#define cognew(code, par) coginit(0x8, (code), (par))
-#define cogstop(i) _cogstop(i)
-#endif
 
 INLINE__ int32_t Shr__(uint32_t a, uint32_t b) { return (a>>b); }
 static char dat[] = {
@@ -62,8 +54,9 @@ static char dat[] = {
 };
 int32_t vga_tile_driver_start(vga_tile_driver *self, int32_t params)
 {
-  self->mycog = cognew((int32_t)(((int32_t *)&dat[0])), params) + 1;
-  return self->mycog;
+//  self->mycog = cognew((int32_t)(((int32_t *)&dat[0])), params) + 1;
+    self->mycog = coginit(4, (int32_t)(((int32_t *)&dat[0])), params) + 1;
+    return self->mycog;
 }
 
 void vga_tile_driver_stop(vga_tile_driver *self)

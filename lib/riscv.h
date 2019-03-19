@@ -12,6 +12,7 @@
 
 #define UART 0xBC0
 #define WAITCYC 0xBC1
+#define DBGPRNT 0xBC2
 #define CNT  0xC00
 
 #define X__(x) #x
@@ -62,6 +63,8 @@
 
 #define getcnt() csr_read(CNT)
 #define waitcnt(tim) csr_write(WAITCYC, tim)
+
+#define trigger_debug() csr_read(DBGPRNT)
 
 // NOTE:
 // CUSTOM0 opcode is 0x0b (2<<2)+3

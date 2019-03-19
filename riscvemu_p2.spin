@@ -917,8 +917,17 @@ custom1op
 		mov	rs2, 0-0
 		cmp	opcode, #0 wz
     if_nz	jmp	#not_coginit
-    		setq	rs2
-		coginit dest, rs1
+
+    		sar	opcode, #20
+    		mov	funct2, opcode
+		and	funct2, #3	wz
+    if_nz	jmp	#illegalinstr
+		shr	opcode, #2	' this is actually rs3
+		alts	opcode, #x0
+		mov	opcode, 0-0
+    		setq	opcode
+		mov	dest, rs1
+		coginit dest, rs2
 		jmp	#write_and_nexti
 not_coginit
 		jmp	#illegalinstr

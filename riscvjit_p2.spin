@@ -277,7 +277,7 @@ optable
 
 {08}		long	storetab	' store
 {09}		and	0,illegalinstr	' float store
-{0A}		and	0,illegalinstr	' custom1
+{0A}		long	custom1tab	' custom1
 {0B}		and	0,illegalinstr	' atomics
 {0C}		long	mathtab		' math reg<->reg
 {0D}		and	0,lui		' lui
@@ -818,6 +818,10 @@ csrrw
 		jmp	#\compile_csrw
 
 
+coginit_pattern
+		setq	0-0
+		altr	0-0
+		coginit 0-0,0-0
 calldebug
 		call	#\debug_print
 		long	$FFFFFFFF
@@ -842,6 +846,8 @@ wrpininstr
 		jmp	#\hub_wrpininstr
 rdpininstr
 		jmp	#\hub_rdpininstr
+coginitinstr
+		jmp	#\hub_coginitinstr
 
 '=========================================================================
 		'' VARIABLES
@@ -934,6 +940,15 @@ custom0tab
 		and	%001000000, pinsetinstr		' dirl
 		and	0, wrpininstr
 		and	0, rdpininstr
+custom1tab
+		and	0, coginitinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
+		and	0, illegalinstr
 end_of_tables
 
 		fit	$1f0
@@ -1489,8 +1504,20 @@ hub_rdpininstr
 	if_z	setd	opdata, rd
 		jmp	#emit_opdata_and_ret
 		
-
-		''
+hub_coginitinstr
+		mov	func2, immval
+		and	func2, #3 wz
+	if_nz	jmp	#illegalinstr
+		' immval is actually rs3, which will go into setq
+		shr	immval, #2 wz
+		setd	coginit_pattern, immval
+		setd	coginit_pattern+1, rd
+		setd	coginit_pattern+2, rs1
+		sets	coginit_pattern+2, rs2
+		mov	opptr, #coginit_pattern
+		jmp	#emit3
+		
+		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 		'' code for doing compilation
 		''
 hub_compile

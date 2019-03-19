@@ -11,7 +11,7 @@
 #endif
 
 #include <stdint.h>
-#include "riscv.h"
+#include "../lib/riscv.h"
 
 extern void iprintf(const char *, ...);
 

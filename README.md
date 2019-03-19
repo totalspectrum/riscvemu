@@ -159,15 +159,13 @@ getpin res, offset_mode(pin)
    
 CUSTOM_1:
 
-cognew res, addr, param
-   .insn r CUSTOM_1, 0, 0, res, addr, param
+'' 4 operand
+coginit res, dval, addr, param
+   .insn r CUSTOM_1, 0, 0, res, dval, addr, param
    addr is address of COG code to run, or 0 for RISC-V kernel
    param is parameter to pass (stack pointer for RISC-V kernel)
-   does a coginit with fixed D0 (to allocate a new COG)
-   
-hubset x0, rN, x0
-   .insn r CUSTOM_1, 0, 1, x0, rN, x0
-   
+   dval is the D register value for coginit
+
 
  ==========================================
  STREAMER:

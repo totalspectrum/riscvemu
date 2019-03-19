@@ -14,7 +14,7 @@
 #define WAITCYC 0xBC1
 #define DBGPRNT 0xBC2
 #define CNT  0xC00
-#define CNTH 0xC01
+#define CNTH 0xC80
 
 #define X__(x) #x
 #define X_(x) X__(x)

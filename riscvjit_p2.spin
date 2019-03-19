@@ -15,7 +15,7 @@
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
       C00 - cycle counter
-      C01 - cycle counter high
+      C80 - cycle counter high
       
    Theory of operation:
      We pre-compile instructions and run them from a cache.
@@ -1174,8 +1174,8 @@ not_cog
   		setd	opdata, rd
 		jmp	#emit_opdata_and_ret
 not_mcount
-		'' $c01 == cycleh (high cycle counter)
-		cmp	immval, #1 wz
+		'' $c80 == cycleh (high cycle counter)
+		cmp	immval, #$80 wz
 	if_nz	jmp	#illegalinstr
 		mov	opdata, getcth_pat
 		setd	opdata, rd

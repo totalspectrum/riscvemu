@@ -921,7 +921,7 @@ do_csr
 		getct	dest
 		jmp	#write_and_nexti
 not_timer
-		cmp	opcode, ##$C01 wz
+		cmp	opcode, ##$C80 wz
 	if_nz	jmp	#not_timerh
 		mov	dest, cycleh
 		jmp	#write_and_nexti

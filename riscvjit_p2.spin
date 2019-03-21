@@ -93,38 +93,47 @@ CON
 DAT
 		org 0
 		'' initial COG boot code
-		cogid	   pa
-		setq	   #0
-		coginit	   pa, ##$400
+		jmp	   #initial_boot
+		nop
+		nop
+		nop
 		' config area
-		orgh $10
+		'orgh $10
 		long	   0
 		long	   23_000_000	' frequency
 		long	   0		' clock mode
 		long	   230_400	' baud
 
-		orgh $400
+initial_boot
+		cogid	   pa
+		loc	   ptra, #TOP_OF_MEM
+		loc	   ptrb, #BASE_OF_MEM
+		wrlong	   #0, --ptra		' push argument
+		wrlong	   ptrb, --ptra		' push PC
+		setq	   ptra
+		coginit	   pa, #@enter
+
 		org 0
 enter
-x0		nop
+x0		nop			' must be 0
 x1		jmp	#x3
-x2		long	TOP_OF_MEM
-x3		nop
+x2		long	TOP_OF_MEM	' initial stack pointer; re-written later
+x3		rdlong	temp, #$18	' get old clock mode
 
-x4		loc	ptrb, #\BASE_OF_MEM
-x5		rdlong	temp, #$18	' get old clock mode
-x6		hubset	temp
-x7		mov	x1, #$1ff	' will count down
-
+x4		hubset	temp
+x5		mov	x1, #$1ff	' will count down
 		' initialize LUT memory
-x8		neg	x3,#1
-x9		nop
-x10		wrlut	x3,x1
-x11		djnz	x1,#x10
+x6		neg	x3,#1
+x7		wrlut	x3,x1
+x8		djnz	x1,#x7
 
-x12		loc	ptra, #\boot_msg
-x13		call	#ser_init
-x14		nop
+x9		mov	x1, ptra	' save original arg
+x10		rdlong	ptrb, ptra++	' pop pc
+x11		rdlong	x10, ptra++	' pop a0 register
+x12		mov	x2, ptra	' save stack pointer
+
+x13		loc	ptra, #\boot_msg
+x14		call	#ser_init
 x15		jmp	#startup
 
 x16		long	0[16]
@@ -154,6 +163,14 @@ ct3_isr
 		
 		'' now start execution
 startup
+#ifdef DEBUG_STARTUP
+		mov	info1, x1
+		call	#ser_hex
+		mov	info1, ptrb
+		call	#ser_hex
+		mov	info1, x2
+		call	#ser_hex
+#endif
 		'' set up interrupt for CT3 == 0
 		'' to measure cycle rollover
 		getct	lastcnt
@@ -935,6 +952,10 @@ end_of_tables
 		fit	$1f0
 
 		orgh
+''
+''
+initial_startup
+
 ''
 '' some lesser used routines that can go in HUB memory
 ''

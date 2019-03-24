@@ -37,6 +37,7 @@ CON
   we have 64 cache lines
 }
 '#define DEBUG_CACHE
+'#define NEVER_L2CACHE
 
 #ifdef DEBUG_CACHE
 ' bits per cache line
@@ -47,10 +48,8 @@ PC_CACHELINE_BITS = 6
 #else
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
-'TOTAL_CACHE_BITS = 8
-
-PC_CACHELINE_BITS = 7
-'PC_CACHELINE_BITS = 6
+'PC_CACHELINE_BITS = 7
+PC_CACHELINE_BITS = 6
 #endif
 L1_TAGIDX_BITS = (TOTAL_CACHE_BITS-PC_CACHELINE_BITS)
 
@@ -67,7 +66,7 @@ TOTAL_CACHE_MASK = (1<<TOTAL_CACHE_BITS)-1
 '' level 2 cache
 '' separate cache in HUB ram. The top part of HUB is locked, so we can
 '' only go up to about 8K??
-L2_CACHE_SIZE_BITS=13
+L2_CACHE_SIZE_BITS=14
 L2_TAGIDX_BITS = (L2_CACHE_SIZE_BITS-PC_CACHELINE_BITS)
 NUM_L2_TAGS = (1<<L2_TAGIDX_BITS)
 L2_TAGIDX_MASK = (NUM_L2_TAGS-1)
@@ -77,7 +76,7 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $2000  ' 8K
-  TOP_OF_MEM = $78000   ' leaves 32K free at top; 16K of that is locked
+  TOP_OF_MEM = $70000   ' leaves 64K free at top; 16K of that is locked
   RX_PIN = 63
   TX_PIN = 62
 
@@ -93,47 +92,38 @@ CON
 DAT
 		org 0
 		'' initial COG boot code
-		jmp	   #initial_boot
-		nop
-		nop
-		nop
+		cogid	   pa
+		setq	   #0
+		coginit	   pa, ##$400
 		' config area
-		'orgh $10
+		orgh $10
 		long	   0
 		long	   23_000_000	' frequency
 		long	   0		' clock mode
 		long	   230_400	' baud
 
-initial_boot
-		cogid	   pa
-		loc	   ptra, #TOP_OF_MEM
-		loc	   ptrb, #BASE_OF_MEM
-		wrlong	   #0, --ptra		' push argument
-		wrlong	   ptrb, --ptra		' push PC
-		setq	   ptra
-		coginit	   pa, #@enter
-
+		orgh $400
 		org 0
 enter
-x0		nop			' must be 0
+x0		nop
 x1		jmp	#x3
-x2		long	TOP_OF_MEM	' initial stack pointer; re-written later
-x3		rdlong	temp, #$18	' get old clock mode
+x2		long	TOP_OF_MEM
+x3		nop
 
-x4		hubset	temp
-x5		mov	x1, #$1ff	' will count down
+x4		loc	ptrb, #\BASE_OF_MEM
+x5		rdlong	temp, #$18	' get old clock mode
+x6		hubset	temp
+x7		mov	x1, #$1ff	' will count down
+
 		' initialize LUT memory
-x6		neg	x3,#1
-x7		wrlut	x3,x1
-x8		djnz	x1,#x7
+x8		neg	x3,#1
+x9		nop
+x10		wrlut	x3,x1
+x11		djnz	x1,#x10
 
-x9		mov	x1, ptra	' save original arg
-x10		rdlong	ptrb, ptra++	' pop pc
-x11		rdlong	x10, ptra++	' pop a0 register
-x12		mov	x2, ptra	' save stack pointer
-
-x13		loc	ptra, #\boot_msg
-x14		call	#ser_init
+x12		loc	ptra, #\boot_msg
+x13		call	#ser_init
+x14		nop
 x15		jmp	#startup
 
 x16		long	0[16]
@@ -163,14 +153,6 @@ ct3_isr
 		
 		'' now start execution
 startup
-#ifdef DEBUG_STARTUP
-		mov	info1, x1
-		call	#ser_hex
-		mov	info1, ptrb
-		call	#ser_hex
-		mov	info1, x2
-		call	#ser_hex
-#endif
 		'' set up interrupt for CT3 == 0
 		'' to measure cycle rollover
 		getct	lastcnt
@@ -189,7 +171,6 @@ startup
 '' cache line at ptrb
 ''
 set_pc
-		'' set the pc to ptrb
 		mov	cachepc, ptrb
 		and	cachepc, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		mov	cache_offset, ptrb
@@ -202,7 +183,8 @@ set_pc
 		
 		andn	ptrb, #PC_CACHEOFFSET_MASK   	     	' back ptrb up to start of line
 		alts	tagidx, #l1tags	
-		cmp	ptrb, 0-0 wz
+		mov	temp, 0-0
+		cmp	ptrb, temp wz
 	if_z	add	ptrb, #PC_CACHELINE_LEN	' skip to start of next line
 	if_nz	call	#recompile
 		push	#set_pc
@@ -237,6 +219,9 @@ recompile
 		
 		cmp    ptrb, temp wz
 	if_nz	jmp    #need_compile
+#ifdef NEVER_L2CACHE
+		jmp	#need_compile
+#endif		
 		setd   .rdcmd, cacheptr
 		'' read from the L2 cache
 		shl	l2idx, #(PC_CACHELINE_BITS+2) ' +2 to convert from RV instructions to P2 bytes
@@ -413,7 +398,6 @@ noaltr
 		sets	opdata, rs2
 		setd  	opdata, rs1
 emit_opdata_and_ret
-emit_opdata
 		wrlut	opdata, cacheptr
 	_ret_	add	cacheptr, #1
 
@@ -463,11 +447,6 @@ sltfunc
 
 sltfunc_pat
 		wrc	0-0
-wrnegc_pat
-  if_c		neg	0-0, #1
-
-hubset_pat
-		hubset	0
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
@@ -476,6 +455,12 @@ hubset_pat
 ''     add ptra, rs1
 ''     rdlong rd, ptra wc
 ''     muxc rd, SIGNMASK (optional, only if wc set on prev. instruction)
+''
+'' there are some special cases if the immediate value is small:
+''    if immval == 0, just do rdlong rd, rs1 wc
+''    if immval < 64 and we are a long word read, do:
+''      mov ptra, rs1
+''      rdlong rd, ptra[immval/4]
 ''
 '' the opdata field has:
 ''   instruction set up for rd/write (load/store share most code)
@@ -497,9 +482,35 @@ loadop
 	if_z	jmp	#emit_nop
 ldst_common
 		cmp	immval, #0 wz
-	if_nz	jmp	#full_ldst_imm
+	if_nz	jmp	#maybe_full_ldst_imm
 		mov	dest, rs1
 		jmp	#final_ldst
+maybe_full_ldst_imm
+		mov	temp, #15
+		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
+		' which is what we want
+		and	func3, #3
+		shl	temp, func3
+		cmp	immval, temp wcz
+	if_a	jmp	#full_ldst_imm
+		shr	immval, func3	' now immval is between 0 and 15
+		'
+		' OK, we can emit
+		'
+		' mov ptra, rs1
+		' wrbyte rd, ptra[immval]
+		sets	mov_to_ptra, rs1
+		mov	opptr, #mov_to_ptra
+
+		call	#emit1
+		mov	signmask, opdata
+		shr	signmask, #9
+		and	signmask, #$1ff wz	' check for sign mask
+		or	immval, #%1000_00000	' SUP mode for ptra[immval]
+		sets	opdata, immval
+		bith	opdata, #IMM_BITNUM	' change to imm mode
+		
+		jmp	#do_opdata_and_sign
 full_ldst_imm
 		and	immval, LOC_MASK
 		andn	locptra, LOC_MASK
@@ -520,6 +531,7 @@ final_ldst
 		'' now change the opdata to look like
 		''   rdword rd, ptra
 		sets	opdata, dest
+do_opdata_and_sign		
 		setd	opdata, rd
 		wrlut	opdata, cacheptr
 		add	cacheptr, #1
@@ -534,6 +546,8 @@ locptra
 		loc	ptra, #\0
 addptra
 		add	ptra, 0-0
+mov_to_ptra
+		mov	ptra, 0-0
 ioptra
 		rdlong  0-0, ptra
 signext_instr
@@ -953,10 +967,6 @@ end_of_tables
 
 		orgh
 ''
-''
-initial_startup
-
-''
 '' some lesser used routines that can go in HUB memory
 ''
 '=========================================================================
@@ -1089,7 +1099,11 @@ issue_branch_cond
 		' make immval point to the jump table entry
 		and	immval, #(TOTAL_CACHE_MASK & !PC_CACHEOFFSET_MASK)
 		add	immval, cache_offset
-
+#ifdef FIXME
+		mov	info1, immval
+		call	#ser_hex
+		call	#ser_nl
+#else
 		'' optimization: see if we've already emitted the jump
 		'' we're jumping to; if so, we can grab it from the
 		'' jump table and skip a level of indirection
@@ -1099,7 +1113,7 @@ issue_branch_cond
 	if_ae	jmp	#make_new_jump
 		rdlut	opdata, immval
 		jmp	#have_opcode
-
+#endif		
 make_new_jump
 		'' want to emit a conditional jump here
 		add	immval, CACHE_START
@@ -1557,6 +1571,17 @@ hub_rdpininstr
 		jmp	#emit_opdata_and_ret
 		
 hub_coginitinstr
+#ifdef FIXME
+		mov	info1, immval
+		call	#ser_hex
+		mov	info1, rs2
+		call	#ser_hex
+		mov	info1, rs1
+		call	#ser_hex
+		mov	info1, rd
+		call	#ser_hex
+		call	#ser_nl
+#endif
 		shr	immval, #5	' skip over rs2
 		mov	func2, immval
 		and	func2, #3 wz
@@ -1577,29 +1602,8 @@ hub_coginitinstr
 		mov	opptr, #coginit_pattern
 		jmp	#emit4
 
-		''
-		'' the single destination instructions all look like
-		'' hubset, but have varying low (S) bits
-		''
 hub_singledestinstr
-		cmp	rd, #0	wz
-	if_z	mov	rd, #temp
-		call	#emit_mov_rd_rs1
-		mov	opdata, hubset_pat
-		sets	opdata, immval	' set the S bits
-		setd	opdata, rd
-
-		' high 3 bits of immediate value have various meanings:
-		'  bit 31: set WC flag in instruction
-		'  bit 30: if C set, write -1 to register
-		testb	immval, #31 wc	' check for WC flag
-		bitc	opdata, #WC_BITNUM ' write it into the instruction
-		call	#emit_opdata
-		testb	immval, #30 wc
-	if_nc	ret
-		mov	opdata, wrnegc_pat
-		setd	opdata, rd
-		jmp	#emit_opdata_and_ret
+		jmp	#illegalinstr
 		
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 		'' code for doing compilation

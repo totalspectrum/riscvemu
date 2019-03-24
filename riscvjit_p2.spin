@@ -40,11 +40,12 @@ CON
 '#define NEVER_L2CACHE
 
 #ifdef DEBUG_CACHE
+#define DEBUG_CACHE_DUMP
 ' bits per cache line
-TOTAL_CACHE_BITS = 7
+'TOTAL_CACHE_BITS = 7
+'PC_CACHELINE_BITS = 6
+TOTAL_CACHE_BITS = 9
 PC_CACHELINE_BITS = 6
-'TOTAL_CACHE_BITS = 9
-'PC_CACHELINE_BITS = 7
 #else
 ' bits per cache line
 TOTAL_CACHE_BITS = 9
@@ -762,28 +763,6 @@ emit1
 mvins 	      	mov     0-0,#0
 negins		neg	0-0,#0
 
-emit_mvi
-		cmp	immval, #0 wcz
-	if_b	mov	opdata, negins
-	if_b	neg	immval
-	if_ae	mov	opdata, mvins
-emit_big_instr
-		mov	big_temp_0+1,opdata
-		cmp	dest, #x0 wz
-	if_z	ret	' never write to x0
-		mov	temp, immval
-		shr	temp, #9	wz
-		and	big_temp_0, AUG_MASK
-		or	big_temp_0, temp
-		and	immval, #$1FF
-		sets	big_temp_0+1, immval
-		setd	big_temp_0+1, dest
-		mov	opptr, #big_temp_0
-		'' if the augment bits are nonzero, emit augment
-	if_nz	jmp	#emit2
-		'' otherwise skip the augment part
-		add	opptr, #1
-		jmp	#emit1
 big_temp_0
 		mov	0-0, ##0-0
 
@@ -844,6 +823,7 @@ waitcnt_instr
 uart_send_instr
 		mov	uartchar, 0-0
 		call	#\ser_tx
+		or	x0, x0
 uart_recv_instr
 		call	#\ser_rx
 		mov	0-0, uartchar
@@ -1017,7 +997,30 @@ imp_div
 	_ret_	negc	rd
 
 
-		'
+emit_mvi
+		cmp	immval, #0 wcz
+	if_b	mov	opdata, negins
+	if_b	neg	immval
+	if_ae	mov	opdata, mvins
+emit_big_instr
+		mov	big_temp_0+1,opdata
+		cmp	dest, #x0 wz
+	if_z	ret	' never write to x0
+		mov	temp, immval
+		shr	temp, #9	wz
+		and	big_temp_0, AUG_MASK
+		or	big_temp_0, temp
+		and	immval, #$1FF
+		sets	big_temp_0+1, immval
+		setd	big_temp_0+1, dest
+		mov	opptr, #big_temp_0
+		'' if the augment bits are nonzero, emit augment
+	if_nz	jmp	#emit2
+		'' otherwise skip the augment part
+		add	opptr, #1
+		jmp	#emit1
+
+'
 		' handle addi instruction specially
 		' if we get addi R, x0, N
 		' we emit mov R, #N instead
@@ -1241,7 +1244,7 @@ skip_uart_read
 		'' implement uart
   		sets	uart_send_instr, rs1
 		mov	opptr, #uart_send_instr
-		jmp	#emit2		' return from there to caller
+		jmp	#emit3		' return from there to caller
 
 not_uart
 		cmp	immval, #$1C1 wz

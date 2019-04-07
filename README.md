@@ -3,30 +3,44 @@
 Copyright 2017-2019 Total Spectrum Software Inc.
 Terms of use: MIT License (see the file LICENSE.txt)
 
-An emulator for the RISC-V processor architecture, designed to run
-in a single Propeller COG. There's also a version for the Propeller 2.
-In fact the P2 version is the more up to date, and this document mostly
-discusses that.
+## Overview
 
-The instruction set emulated is RV32IM, mostly, except that the 64 bit
-multiplies are not yet implemented. The only standard CSR implemented on
-P1 is the low 32 bits of the cycle counter (so rdcycle works, but rdcycleh does
-not). On P2 the full 64 bit cycle counter is available.
+An emulator for the RISC-V processor architecture, designed to run in
+a single Propeller COG. There's also a version for the Propeller 2.
+In fact the P2 version is the more up to date, and this document
+mostly discusses that.
+
+The instruction set emulated is RV32IM, mostly, except that some 64
+bit multiplies are not yet implemented. The only standard CSR
+implemented on P1 is the low 32 bits of the cycle counter (so rdcycle
+works, but rdcycleh does not). On P2 the full 64 bit cycle counter is
+available.
 
 Some non-standard CSRs are used to access a UART emulation and to directly access
-propeller registers. These are different between P1 and P2.
+propeller registers. See below for details.
 
-riscvemu.spin is the actual emulator (the guts are in PASM, of course)
+### Roadmap
+
+coginit - demo of using COGINIT on P2
+dhry - dhrystone benchmark
+fftbench - FFT benchmark
+fibo - recursive fibonacci
+hello - hello world using Newlib library, see Readme.txt
+toggle - LED toggle code
+vga - P2 VGA demo
+xxtea - xxtea benchmark
+
+riscvemu.spin is the P1 emulator (the guts are in PASM, of course)
 riscvemu_p2.spin is a P2 version of the emulator
-riscvjit_p2.spin is an advanced P2 version that caches the results of
-    compilation.
-debug.spin is a top level test harness
+riscvjit_p2.spin is an advanced P2 version that compiles to P2 code
+debug.spin is a top level test harness for the emulators
 
-Generally we build debug.spin, pad it out to an 8K boundary, and then
-postpend a RISC-V binary. On the Propeller 1 we then have to fix up
-the binary checksum; this is done with the p1_chksum tool found in
-the tools/ directory. See for example the Makefiles
-in the fftbench/, fibo/, and xxtea/ subdirectories.
+## Usage
+
+You'll need a RISC-V toolchain; I used the standard GCC toolchain from
+https://github.com/riscv/riscv-gnu-toolchain. Make sure to build for
+the rv32im architecture (many embedded toolchains build for rv32imc,
+but riscvemu does not support compressed instructions yet).
 
 The RISC-V binary should be linked to start at address 8192 (0x2000).
 See the Makefiles for examples of how to do this.
@@ -36,49 +50,11 @@ These produce three binaries, p1.binary, p2.binary, and p2emu.binary.
 p1.binary is the P1 emulator. p2.binary is the P2 JIT version, and
 p2emu.binary is the P2 emulator version.
 
-The interface to start up the emulator is pretty simple: the params
-array passed to the start method should contain:
+## P2 Support
 
-```   
-   params[0] = address of command register
-   params[1] = base of emulated memory
-   params[2] = size of emulated memory (stack will start at base + size and grow down)
-   params[3] = initial pc (usually 0)
-   params[4] = address for register dump (40 longs; x0-x31, pc, opcode, dbg1, dbg2, dbg3, dbg4, reserved, stepcount)
-```
+See lib/riscv.h for some useful utility macros.
 
-The register dump should have 40 longs. The first 32 are the RISC-V general
-purpose registers x0-x31. The others are:
-```
-  reg[32]: program counter
-  reg[33]: current opcode
-  reg[34]: debug info1
-  reg[35]: debug info2
-  reg[36]: debug info3
-  reg[37]: debug info4
-  reg[38]: reserved
-  reg[39]: stepcount (for single stepping; 0 = run continuously)
-```
-
-The command register is used for communication from the RISC-V back to the host.
-The lowest 4 bits contain a command, as follows:
-```
-   $1 = single step (registers have been dumped)
-   $2 = illegal instruction encountered (registers have been dumped)
-   $F = request to write character in bits 12-8 of command register
-```
-
-The host should write 0 to the command register as an "ACK" to restart
-the RISC-V. When it does so, the registers will be re-read. If the
-`stepcount` field is non-zero then the emulated processor will step
-this many times before stopping again. If it is 0 it will run continuously.
-
-The JIT compiler is much simpler, and does not have the debug interface. It's
-a pure PASM program and hence only requires one COG (the other emulators use
-two COGs, one for the debug stub and one for the Risc-V emulation).
-
----------------------------------------------------------------------
-## Emulated CSRs:
+### Emulated CSRs:
 ```
   C00 - cycle counter (low 32 bits)
   C80 - cycle counter (high 32 bits) (P2 only)
@@ -90,17 +66,15 @@ two COGs, one for the debug stub and one for the Risc-V emulation).
   BC2 - debug register, used for internal debug purposes
   7Fx - COG registers 1F0 - 1FF
 ```
-----------------------------------------------------------------------
-## Custom instructions
+
+### Custom instructions
 
 On the P2, we add new instructions to the CUSTOM_0 and CUSTOM_1 opcode spaces (these are P2 only,
 the P1 emulator does not have them).
 
-CUSTOM_0 is used for s or sb format (2 registers, 1 imm) (like many others in 00-07)
-   pin manipulation instructions
+CUSTOM_0 is used for pin manipulation instructions
    
-CUSTOM_1 is used for r format (3 or 4 registers) or i format (2 registers, 1 imm)
-   miscellaneous instructions
+CUSTOM_1 is used for COGINIT and other miscellaneous instructions
 
 ### CUSTOM_0: Pin instructions
 
@@ -197,7 +171,66 @@ These look like:
      .insn i CUSTOM_1, 1, a0, 0x03(a0)
 ```
 
-If the high bit of the immediate is set, the WC flag is set on the generated instruction. If the second highest bit of the immediate is also set, then the final destination is written as -1 if C is set after the instruction executes.
+This allows access to the whole block of P2 instructions from HUBSET
+to MODZ, although not all of these will be useful.  If the high bit of
+the immediate is set, the WC flag is set on the generated
+instruction. If the second highest bit of the immediate is also set,
+then the final destination is written as -1 if C is set after the
+instruction executes.
+
+## Spin interfaces
+
+### JIT interface
+
+Not much of an interface here; the runtime code initializes the UART
+and then just jumps directly to the RISC-V interpreter. In theory
+riscvjit_p2.spin could be built with any P2 assembler, but you may
+have to preprocess it first.
+
+### Emulator interface
+
+The emulator can actually act as a Spin object.  The interface to
+start up the emulator is pretty simple: the params array passed to the
+start method should contain:
+
+```   
+   params[0] = address of command register
+   params[1] = base of emulated memory
+   params[2] = size of emulated memory (stack will start at base + size and grow down)
+   params[3] = initial pc (usually 0)
+   params[4] = address for register dump (40 longs; x0-x31, pc, opcode, dbg1, dbg2, dbg3, dbg4, reserved, stepcount)
+```
+
+The register dump should have 40 longs. The first 32 are the RISC-V general
+purpose registers x0-x31. The others are:
+```
+  reg[32]: program counter
+  reg[33]: current opcode
+  reg[34]: debug info1
+  reg[35]: debug info2
+  reg[36]: debug info3
+  reg[37]: debug info4
+  reg[38]: reserved
+  reg[39]: stepcount (for single stepping; 0 = run continuously)
+```
+
+The command register is used for communication from the RISC-V back to the host.
+The lowest 4 bits contain a command, as follows:
+```
+   $1 = single step (registers have been dumped)
+   $2 = illegal instruction encountered (registers have been dumped)
+   $F = request to write character in bits 12-8 of command register
+```
+
+The host should write 0 to the command register as an "ACK" to restart
+the RISC-V. When it does so, the registers will be re-read. If the
+`stepcount` field is non-zero then the emulated processor will step
+this many times before stopping again. If it is 0 it will run continuously.
+
+The JIT compiler is much simpler, and does not have the debug interface. It's
+a pure PASM program and hence only requires one COG (the other emulators use
+two COGs, one for the debug stub and one for the Risc-V emulation).
+
 
 
 

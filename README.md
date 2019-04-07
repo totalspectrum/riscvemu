@@ -21,6 +21,7 @@ propeller registers. See below for details.
 
 ### Roadmap
 
+```
 coginit - demo of using COGINIT on P2
 dhry - dhrystone benchmark
 fftbench - FFT benchmark
@@ -34,6 +35,7 @@ riscvemu.spin is the P1 emulator (the guts are in PASM, of course)
 riscvemu_p2.spin is a P2 version of the emulator
 riscvjit_p2.spin is an advanced P2 version that compiles to P2 code
 debug.spin is a top level test harness for the emulators
+```
 
 ## Usage
 
@@ -54,7 +56,7 @@ p2emu.binary is the P2 emulator version.
 
 See lib/riscv.h for some useful utility macros.
 
-### Emulated CSRs:
+### Emulated CSRs
 ```
   C00 - cycle counter (low 32 bits)
   C80 - cycle counter (high 32 bits) (P2 only)
@@ -70,13 +72,13 @@ See lib/riscv.h for some useful utility macros.
 ### Custom instructions
 
 On the P2, we add new instructions to the CUSTOM_0 and CUSTOM_1 opcode spaces (these are P2 only,
-the P1 emulator does not have them).
+the P1 emulator does not have them).  See lib/riscv.h for some macros for using these.
 
 CUSTOM_0 is used for pin manipulation instructions
    
 CUSTOM_1 is used for COGINIT and other miscellaneous instructions
 
-### CUSTOM_0: Pin instructions
+#### CUSTOM_0: Pin instructions
 
 CUSTOM_0, 0 and CUSTOM_0, 1 are reserved
 ```
@@ -145,9 +147,9 @@ getpin res, offset_mode(pin)
 	 11: do akpin
 ```
    
-### CUSTOM_1: Misc control instructions
+#### CUSTOM_1: Misc control instructions
 
-#### 4 operand instructions
+##### 4 operand instructions
 
 ```
 coginit res, dval, addr, param
@@ -159,7 +161,7 @@ coginit res, dval, addr, param
 Other values for func2 are reserved.
 ```
 
-#### Direct immediate instructions
+##### Direct immediate instructions
 
 These look like:
 ```

@@ -19,7 +19,7 @@ available.
 Some non-standard CSRs are used to access a UART emulation and to directly access
 propeller registers. See below for details.
 
-### Roadmap
+### Directories and Files
 
 ```
 coginit - demo of using COGINIT on P2
@@ -92,7 +92,14 @@ drv val, offset_mode(pin)
 		01 => store !val to pin (use val=x0 for drvh)
 	        10 => store random data to pin (drvrnd etc.)
 		11 => invert pin (drvnot etc.)
-		
+
+  example: the P2 instruction
+     drvh  #2
+  is achieved via the RISC-V instruction
+     .insn sb CUSTOM_0, 2, x0, 0x402(x0)
+  to set pin 56 to the value in register x10, do:
+     .insn sb CUSTOM_0, 2, x10, 56(x0)
+     
 flt val, offset_mode(pin)
    .insn sb  CUSTOM_0, 3, val, offset_mode(pin)
    offset_mode is %zz_xxxx_pppppp, where:
@@ -167,9 +174,15 @@ These look like:
 ```
 .insn i CUSTOM_1, 1, res, imm(dval)
    generates P2 opcode 1101010 with D=res (initialized to dval) and S=imm
-   so for example to get current COG id into a0
-     .insn i CUSTOM_1, 1, a0, 0x001(a0) 
-   to stop a COG whose id is in a0:
+   That is, the output register is "res", input register is "dval", and
+   "imm" selects the actual opcode to use. Note that in P2 the output and
+   input will always be the same for these instructions (the instruction
+   field uses D for both) unless you use ALTR.
+   
+   for example to get current COG id into a0
+     .insn i CUSTOM_1, 1, a0, 0x001(a0)
+   (this translates to a P2 COGID instruction)
+   to stop a COG whose id is in a0 (P2 COGSTOP):
      .insn i CUSTOM_1, 1, a0, 0x03(a0)
 ```
 
@@ -178,7 +191,8 @@ to MODZ, although not all of these will be useful.  If the high bit of
 the immediate is set, the WC flag is set on the generated
 instruction. If the second highest bit of the immediate is also set,
 then the final destination is written as -1 if C is set after the
-instruction executes.
+instruction executes. This is useful for generating LOCKTRY and similar
+instructions.
 
 ## Spin interfaces
 

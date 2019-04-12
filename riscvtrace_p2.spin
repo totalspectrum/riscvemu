@@ -106,12 +106,6 @@ ct3_isr
 		
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-' routine to compile the instruction starting at ptrb
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-compile_bytecode
-		jmp	#hub_compile_bytecode
-		
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
 ' the lower 20 bits is generally the address to jump to;
 ' the exception is that if the upper bit is set then
@@ -155,11 +149,9 @@ optable
 {1F}		long	illegalinstr
 
 
+SIGNOP_BIT	long	$40000000	' RISCV bit for changing shr/sar
 sardata		sar	0,0
 subdata		sub	0,0
-
-
-SIGNOP_BIT	long	$40000000	' RISCV bit for changing shr/sar
 
 		'' code for typical reg-reg functions
 		'' such as add r0,r1
@@ -209,7 +201,7 @@ reg_reg
 		shr	temp, #25
 		and	temp, #$3f
 		cmp	temp, #1 wz
-	if_z	jmp	#muldiv
+	if_z	jmp	#hub_muldiv
 	
 		testb	opdata, #WZ_BITNUM wc
 	if_nc	jmp	#nosub
@@ -251,16 +243,6 @@ multab
 	call	#\imp_divu
 	call	#\imp_rem
 	call	#\imp_remu
-	
-muldiv
-	alts	func3, #multab
-	mov	temp, 0-0
-	sets	mul_templ, rs1
-	sets	mul_templ+1, rs2
-	mov	mul_templ+2, temp
-	setd	mul_templ+3, rd
-	mov	jit_instrptr, #mul_templ
-	jmp	#emit4
 	
 mul_templ
 	mov	rs1, 0-0
@@ -742,7 +724,7 @@ jit_condition	long	0
 
 dis_instr	long	0
 
-		fit	$1f0
+		fit	$1ec
 
 ''
 '' some lesser used routines that can go in HUB memory
@@ -862,6 +844,16 @@ hub_addi
 		bith	opdata, #IMM_BITNUM
 		jmp	#reg_imm
 
+hub_muldiv
+	alts	func3, #multab
+	mov	temp, 0-0
+	sets	mul_templ, rs1
+	sets	mul_templ+1, rs2
+	mov	mul_templ+2, temp
+	setd	mul_templ+3, rd
+	mov	jit_instrptr, #mul_templ
+	jmp	#emit4
+	
 hub_condbranch		
 		test	func3, #%100 wz
 	if_z	mov	jit_condition, #%1010	' IF_Z
@@ -1251,7 +1243,7 @@ hub_singledestinstr
 		'' code for doing compilation
 		'' called from the JIT engine loop
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-hub_compile_bytecode
+compile_bytecode
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz

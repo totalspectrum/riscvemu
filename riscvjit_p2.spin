@@ -76,7 +76,7 @@ CON
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
-  BASE_OF_MEM = $2000  ' 8K
+  BASE_OF_MEM = $4000  ' 16K
   TOP_OF_MEM = $70000   ' leaves 64K free at top; 16K of that is locked
   RX_PIN = 63
   TX_PIN = 62

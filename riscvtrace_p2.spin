@@ -1,4 +1,5 @@
 '#define DEBUG_ENGINE
+'#define USE_DISASM
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017-2019 Total Spectrum Software Inc.
@@ -34,19 +35,9 @@ CON
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
-  BASE_OF_MEM = $2000  ' 8K
+  BASE_OF_MEM = $4000  ' 8K
   TOP_OF_MEM = $70000   ' leaves 64K free at top; 16K of that is locked
-  RX_PIN = 63
-  TX_PIN = 62
 
-  '' smart pin modes
-  _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
-  _rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
-
-  CYCLES_PER_SEC = 160_000_000
-  CLOCK_MODE = $010007f8
-  BAUD = 230_400
-  
   
 DAT
 		org 0
@@ -509,6 +500,7 @@ jalr
 		call	#emit_mvi	' move into rd
 
 		' and emit the indirect branch code
+		mov	jit_condition, #$f
 		jmp	#jit_emit_indirect_branch
 
 imp_jalr
@@ -616,12 +608,12 @@ waitcnt_instr
 		addct1 0-0, #0
 		waitct1
 uart_send_instr
-		mov	uartchar, 0-0
+		mov	uart_char, 0-0
 		call	#\ser_tx
 		or	x0, x0
 uart_recv_instr
 		call	#\ser_rx
-		mov	0-0, uartchar
+		mov	0-0, uart_char
 		
 '=========================================================================
 ' custom instructions
@@ -651,10 +643,6 @@ opdata
 divflags	long	0
 
 jmptabptr	long	0
-
-uartchar	long	0
-uartcnt		long	0
-waitcycles	long	0
 
 	''
 	'' opcode tables
@@ -762,6 +750,8 @@ dis_instr	long	0
 		'' now start execution
 startup
 		mov	uart_str, ##@boot_msg
+		call	#ser_str
+		
 		'' set up interrupt for CT3 == 0
 		'' to measure cycle rollover
 		getct	lastcnt
@@ -1091,7 +1081,7 @@ debug_print
 		add	uart_num, info2
 		call	#ser_hex
 
-		mov	uartchar, #"@"
+		mov	uart_char, #"@"
 		call	#ser_tx
 		mov	uart_num, ptrb
 		call	#ser_hex
@@ -1280,5 +1270,5 @@ getinstr
 		and	temp, #$1ff
 		jmp	temp			' compile the instruction, return to JIT loop
 
-		orgh	$2000
+		orgh	$4000
 		

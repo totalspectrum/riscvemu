@@ -5,7 +5,7 @@
 }} 
 
 CON
-  PROGBASE = $2000
+  PROGBASE = $4000
 #ifdef __P2__
   _clkfreq = 160_000_000
   _clkmode = $010007f8
@@ -13,7 +13,7 @@ CON
 #else  
   _clkfreq = 80_000_000
   _clkmode = xtal1 + pll16x
-  PROGTOP = $7800
+  PROGTOP = $8000
 #endif  
   
   BUFSIZ = 80

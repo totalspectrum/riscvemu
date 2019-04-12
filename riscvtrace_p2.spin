@@ -38,8 +38,8 @@ CON
   WZ_BITNUM = 19
   IMM_BITNUM = 18
   BASE_OF_MEM = $4000   ' 16K
-  TOP_OF_MEM = $78000   ' leaves 32K free at top
-
+  TOP_OF_MEM = $78000   ' leaves 32K free at top for cache and debug
+  HIBIT = $80000000
   
 DAT
 		org 0
@@ -113,47 +113,46 @@ compile_bytecode
 		
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' table of compilation routines for the various opcodes
-' if the upper 4 bits of the entry is 0, the entry is
-' actually a pointer to another table (indexed by func3)
-' otherwise, the bottom 9 bits is a jump address and
-' the upper 23 bits is a parameter
+' the lower 20 bits is generally the address to jump to;
+' the exception is that if the upper bit is set then
+' it's a pointer to another table indexed by func3
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 optable
-{00}		long	loadtab		' load
-{01}		and	0, illegalinstr	' float load
-{02}		long	custom0tab	' custom0
-{03}		and	0, illegalinstr	' fence
-{04}		long	mathtab		' math immediate: points to sub table
-{05}		and	0,auipc		' auipc
-{06}		and	0,illegalinstr	' wide math imm
-{07}		and	0,illegalinstr	' ???
+{00}		long	HIBIT + loadtab			' TABLE: load instructions
+{01}		long	illegalinstr			' float load
+{02}		long	HIBIT + custom0tab		' TABLE: custom0 instructions
+{03}		long	illegalinstr			' fence
+{04}		long	HIBIT + mathtab			' TABLE: math immediate
+{05}		long	auipc				' auipc instruction
+{06}		long	illegalinstr			' wide math imm
+{07}		long	illegalinstr			' ???
 
-{08}		long	storetab	' store
-{09}		and	0,illegalinstr	' float store
-{0A}		long	custom1tab	' custom1
-{0B}		and	0,illegalinstr	' atomics
-{0C}		long	mathtab		' math reg<->reg
-{0D}		and	0,lui		' lui
-{0E}		and	0,illegalinstr	' wide math reg
-{0F}		and	0,illegalinstr	' ???
+{08}		long	HIBIT + storetab		' TABLE: store instructions
+{09}		long	illegalinstr			' float store
+{0A}		long	HIBIT + custom1tab		' TABLE: custom1
+{0B}		long	illegalinstr			' atomics
+{0C}		long	HIBIT + mathtab			' TABLE: math reg<->reg
+{0D}		long	lui				' lui
+{0E}		long	illegalinstr			' wide math reg
+{0F}		long	illegalinstr			' ???
 
-{10}		and	0,illegalinstr
-{11}		and	0,illegalinstr
-{12}		and	0,illegalinstr
-{13}		and	0,illegalinstr
-{14}		and	0,illegalinstr
-{15}		and	0,illegalinstr
-{16}		and	0,illegalinstr	' custom2
-{17}		and	0,illegalinstr
+{10}		long	illegalinstr
+{11}		long	illegalinstr
+{12}		long	illegalinstr
+{13}		long	illegalinstr
+{14}		long	illegalinstr
+{15}		long	illegalinstr
+{16}		long	illegalinstr	' custom2
+{17}		long	illegalinstr
 
-{18}		and	0,condbranch	' conditional branch
-{19}		and	0,jalr
-{1A}		and	0,illegalinstr
-{1B}		and	0,jal
-{1C}		long	systab	' system
-{1D}		and	0,illegalinstr
-{1E}		and	0,illegalinstr	' custom3
-{1F}		and	0,illegalinstr
+{18}		long	condbranch	' conditional branch
+{19}		long	jalr
+{1A}		long	illegalinstr
+{1B}		long	jal
+{1C}		long	HIBIT + systab	' system
+{1D}		long	illegalinstr
+{1E}		long	illegalinstr	' custom3
+{1F}		long	illegalinstr
 
 
 sardata		sar	0,0
@@ -1257,16 +1256,22 @@ hub_compile_bytecode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
-  		call	#decodei
+  
+  		call	#decodei		' break apart (FIXME: should probably inline this)
+		
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f
 		alts	temp, #optable
-		mov	opdata, 0-0		' fetch long from table
-		test	opdata, CONDMASK wz	' are upper bits 0?
-	if_nz	jmp	#getinstr
+		mov	opdata, 0-0		' fetch long from table; set C if upper bit set
+
+		testb	opdata, #31 wc
+	if_nc	jmp	#getinstr
+		' need to do a table indirection
+		and	opdata, #$1ff		' clear upper bits
 		alts	func3, opdata		' do table indirection
 		mov	opdata, 0-0
+
 getinstr
 		mov	temp, opdata
 		and	temp, #$1ff

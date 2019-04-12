@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-'#define USE_LUT_CACHE
+#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -400,21 +400,6 @@ illegalinstr
 imp_illegal
 		call	#\illegal_instr_error
 
-    		'' deconstruct instr
-decodei
-		mov	immval, opcode
-		sar	immval, #20
-		mov	rs2, immval
-		and	rs2, #$1f
-		mov	rs1, opcode
-		shr	rs1, #15
-		and	rs1, #$1f
-		mov	func3, opcode
-		shr	func3,#12
-		and	func3,#7
-		mov	rd, opcode
-		shr	rd, #7
-	_ret_	and	rd, #$1f
 		
 auipc
 		jmp	#\hub_compile_auipc
@@ -719,8 +704,22 @@ compile_bytecode
 		test	opcode, #3 wcz
   if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
   
-  		call	#decodei		' break apart (FIXME: should probably inline this)
-		
+    		'' decode instruction
+		mov	immval, opcode
+		sar	immval, #20
+		mov	rs2, immval
+		and	rs2, #$1f
+		mov	rs1, opcode
+		shr	rs1, #15
+		and	rs1, #$1f
+		mov	func3, opcode
+		shr	func3,#12
+		and	func3,#7
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f
+
+		'' now look up in table
 		mov	temp, opcode
 		shr	temp, #2
 		and	temp, #$1f

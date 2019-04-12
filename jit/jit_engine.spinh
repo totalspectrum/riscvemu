@@ -68,12 +68,9 @@ jit_trampoline_set_pc
 		'' NOTE: this code assumes that all bits of the PC in ptrb are
 		'' significant. If you know that ptrb is aligned differently,
 		'' you should shift and mask
-#ifdef USE_LUT_CACHE
-		mov	jit_instr, ptrb
-		and	jit_instr, #CACHE_TAG_SIZE-1
-#else		
-		getbyte	jit_instr, ptrb, #0
-#endif		
+		mov    jit_instr, ptrb
+		shr    jit_instr, #2
+		and    jit_instr, #CACHE_TAG_SIZE-1
 		rdlut	jit_temp, jit_instr		' fetch cached trace
 		cmp	jit_temp, ptrb wz		' does it match our PC?
     if_nz	jmp	#cache_miss 		' if not in cache, recompile

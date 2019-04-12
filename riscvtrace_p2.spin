@@ -541,9 +541,7 @@ AUG_MASK	long	$ff800000
 '
 emit_nop
 		mov	jit_instrptr, #emit_nop_pat
-emit_one
-		mov	pb, #1
-		jmp	#jit_emit
+		jmp	#emit1
 
 emit_nop_pat
 		or	0,0	' use this for a nop so we can conditionalize it if necessary
@@ -557,7 +555,7 @@ emit_mov_rd_rs1
 		sets	mov_pat,rs1
 		setd	mov_pat,rd
 		mov	jit_instrptr, #mov_pat
-		jmp	#emit_one
+		jmp	#emit1
 mov_pat		mov	0,0
 
 CONDMASK	long	$f0000000
@@ -711,6 +709,37 @@ emit4
 		mov	pb, #4
 		jmp	#jit_emit
 		
+		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+		'' code for doing compilation
+		'' called from the JIT engine loop
+		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+compile_bytecode
+		' fetch the actual RISC-V opcode
+		rdlong	opcode, ptrb++
+		test	opcode, #3 wcz
+  if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
+  
+  		call	#decodei		' break apart (FIXME: should probably inline this)
+		
+		mov	temp, opcode
+		shr	temp, #2
+		and	temp, #$1f
+		alts	temp, #optable
+		mov	opdata, 0-0		' fetch long from table; set C if upper bit set
+
+		testb	opdata, #31 wc
+	if_nc	jmp	#getinstr
+		' need to do a table indirection
+		and	opdata, #$1ff		' clear upper bits
+		alts	func3, opdata		' do table indirection
+		mov	opdata, 0-0
+
+getinstr
+		mov	temp, opdata
+		and	temp, #$1ff
+		jmp	temp			' compile the instruction, return to JIT loop
+
+
 #include "jit/jit_engine.spinh"
 
 jit_instrptr	long	0
@@ -823,7 +852,7 @@ emit_big_instr
 	if_nz	jmp	#jit_emit
 		'' otherwise skip the augment part
 		add	jit_instrptr, #1
-		jmp	#emit_one
+		jmp	#emit1
 
 '
 		' handle addi instruction specially
@@ -938,7 +967,7 @@ slt_reg
 		call	#emit1
 slt_fini
 		mov	jit_instrptr, #sltfunc_pat
-		jmp	#emit_one	' return from there to our caller
+		jmp	#emit1	' return from there to our caller
 		
 
 hub_compile_csrw
@@ -1240,36 +1269,5 @@ hub_coginitinstr
 hub_singledestinstr
 		jmp	#illegalinstr
 		
-		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-		'' code for doing compilation
-		'' called from the JIT engine loop
-		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-compile_bytecode
-		' fetch the actual RISC-V opcode
-		rdlong	opcode, ptrb++
-		test	opcode, #3 wcz
-  if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
-  
-  		call	#decodei		' break apart (FIXME: should probably inline this)
-		
-		mov	temp, opcode
-		shr	temp, #2
-		and	temp, #$1f
-		alts	temp, #optable
-		mov	opdata, 0-0		' fetch long from table; set C if upper bit set
-
-		testb	opdata, #31 wc
-	if_nc	jmp	#getinstr
-		' need to do a table indirection
-		and	opdata, #$1ff		' clear upper bits
-		alts	func3, opdata		' do table indirection
-		mov	opdata, 0-0
-
-getinstr
-		mov	temp, opdata
-		and	temp, #$1ff
-		jmp	temp			' compile the instruction, return to JIT loop
-
-
 		orgh	$4000
 		

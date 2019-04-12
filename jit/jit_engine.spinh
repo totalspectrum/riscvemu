@@ -285,7 +285,7 @@ jit_top_of_cache_mem
 		long	$3f8
 #else
 jit_base_of_cache_mem
-		long	$70000
+		long	$78000
 jit_top_of_cache_mem
 		long	$7c000
 #endif

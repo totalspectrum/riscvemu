@@ -1,5 +1,7 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
+'#define USE_LUT_CACHE
+
 {{
    RISC-V Emulator for Parallax Propeller
    Copyright 2017-2019 Total Spectrum Software Inc.
@@ -35,8 +37,8 @@ CON
   WC_BITNUM = 20
   WZ_BITNUM = 19
   IMM_BITNUM = 18
-  BASE_OF_MEM = $4000  ' 8K
-  TOP_OF_MEM = $70000   ' leaves 64K free at top; 16K of that is locked
+  BASE_OF_MEM = $4000   ' 16K
+  TOP_OF_MEM = $78000   ' leaves 32K free at top
 
   
 DAT
@@ -1269,6 +1271,7 @@ getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
 		jmp	temp			' compile the instruction, return to JIT loop
+
 
 		orgh	$4000
 		

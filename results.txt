@@ -1,6 +1,6 @@
 P2 results:
-
-             Emu    JIT    Trace
-xxtea:    283520   44596   46168
-fftbench: 334380   43680   43134
-dhry:       1152    7036    3167
+                             Trace
+             Emu    JIT     HUB     LUT
+xxtea:    283520   44596   46168 / 43295
+fftbench: 334380   43680   43134 / 33543
+dhry -O3:   2100   11221    5804 /  1484

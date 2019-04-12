@@ -40,6 +40,8 @@ CON
   BASE_OF_MEM = $4000   ' 16K
   TOP_OF_MEM = $78000   ' leaves 32K free at top for cache and debug
   HIBIT = $80000000
+
+  RV_SIGNOP_BITNUM = 30		' RISCV bit for changing shr/sar
   
 DAT
 		org 0
@@ -149,7 +151,6 @@ optable
 {1F}		long	illegalinstr
 
 
-SIGNOP_BIT	long	$40000000	' RISCV bit for changing shr/sar
 sardata		sar	0,0
 subdata		sub	0,0
 
@@ -166,7 +167,7 @@ regfunc
 
 		testb	opdata, #WC_BITNUM wc 	' check for sar/shr?
 	if_nc	jmp	#nosar
-		test	opcode, SIGNOP_BIT wc	' want sar instead of shr?
+		testb	opcode, #RV_SIGNOP_BITNUM wc	' want sar instead of shr?
 	if_c	mov	opdata, sardata
 		and	immval, #$1f		' only low 5 bits of immediate
 nosar
@@ -205,7 +206,7 @@ reg_reg
 	
 		testb	opdata, #WZ_BITNUM wc
 	if_nc	jmp	#nosub
-		test	opcode, SIGNOP_BIT  wc	' need sub instead of add?
+		testb	opcode, #RV_SIGNOP_BITNUM  wc	' need sub instead of add?
 	if_c	mov	opdata, subdata
 nosub
 		'

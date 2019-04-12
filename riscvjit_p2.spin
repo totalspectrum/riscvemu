@@ -95,7 +95,7 @@ DAT
 		'' initial COG boot code
 		cogid	   pa
 		setq	   #0
-		coginit	   pa, ##$400
+		coginit	   pa, #$40
 		' config area
 		orgh $10
 		long	   0
@@ -103,7 +103,7 @@ DAT
 		long	   0		' clock mode
 		long	   230_400	' baud
 
-		orgh $400
+		orgh $40
 		org 0
 enter
 x0		nop

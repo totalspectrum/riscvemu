@@ -94,9 +94,11 @@ jit_trampoline_set_pc
 #ifdef USE_LUT_CACHE
 		sub	pb, #1
 		rdlut	jit_condition, pb      ' fetch original
+		sub	pb, #1	       	       ' step back to the loc instruction
 #else
 		sub	pb, #4
 		rdlong	jit_condition, pb      ' fetch original
+		sub	pb, #4	       	       ' step back to loc instruction
 #endif
 #ifdef DEBUG_ENGINE
 		mov	uart_char, #"^"

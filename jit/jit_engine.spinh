@@ -59,10 +59,7 @@ jit_set_pc
 	
 jit_trampoline_set_pc
 #ifdef DEBUG_ENGINE
-		mov	uart_char, #"="
-		call	#ser_tx
-		mov	uart_num, ptrb
-		call	#ser_hex
+		call	#hub_print_newpc
 #endif
 		'' check for a cache hit by looking in the LUT
 		'' NOTE: this code assumes that all bits of the PC in ptrb are
@@ -100,7 +97,7 @@ jit_trampoline_set_pc
 		rdlong	jit_condition, pb      ' fetch original
 		sub	pb, #4	       	       ' step back to loc instruction
 #endif
-#ifdef DEBUG_ENGINE
+#ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #"^"
 		call	#ser_tx
 		mov	uart_num, jit_condition
@@ -118,7 +115,7 @@ jit_trampoline_set_pc
 #else
 		wrlong 	jit_instr, pb
 #endif		
-#ifdef DEBUG_ENGINE
+#ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #"^"
 		call	#ser_tx
 		mov	uart_num, pb
@@ -147,7 +144,7 @@ cache_miss
 		mov	jit_orig_cachepc, jit_cachepc	' save the starting cachepc
 		add	jit_instr, #CACHE_TAG_SIZE
 		wrlut	jit_orig_cachepc, jit_instr
-#ifdef DEBUG_ENGINE
+#ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #">"
 		call	#ser_tx
 		mov	uart_num, jit_orig_cachepc
@@ -165,7 +162,7 @@ compile_loop
 		mov	temp, jit_top_of_cache_mem
 		subs	temp, jit_cachepc wcz
 	if_a	jmp	#compile_loop
-#ifdef DEBUG_ENGINE
+#ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #"U"		' cache full...
 		call	#ser_tx
 #endif
@@ -200,7 +197,7 @@ jit_emit_direct_branch
 		mov	jit_instrptr, #jit_direct_jump_pat
     		callpb 	#2, #jit_emit
 jit_finish_line
-#ifdef DEBUG_ENGINE
+#ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #"|"
 		call	#ser_tx
 #endif

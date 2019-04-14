@@ -321,17 +321,8 @@ ldst_common
 		mov	dest, rs1
 		jmp	#final_ldst
 ldst_need_offset
-		mov	temp, #15
-		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
-		' which is what we want
-		and	func3, #3
-		shl	temp, func3
-		cmp	immval, temp wcz
-	if_a	jmp	#full_ldst_imm
-		shr	immval, func3	' now immval is between 0 and 15
-		'
-		' OK, we can emit
-		'
+		' if this is an offset ld/st instruction,
+		' then copy the base register into ptra
 		' mov ptra, rs1
 		' wrbyte rd, ptra[immval]
 		' can skip the "mov" if ptra already holds
@@ -341,23 +332,34 @@ ldst_need_offset
 		mov	ptra_reg, rs1
 		sets	mov_to_ptra, rs1
 		mov	jit_instrptr, #mov_to_ptra
-		call	#emit1
-		
+		call	#emit1		
 skip_ptra_mov
+		'' see if this is a short offset
+		mov	temp, #15
+		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
+		' which is what we want
+		and	func3, #3
+		shl	temp, func3
+		cmp	immval, temp wcz
+	if_a	jmp	#big_offset
+		shr	immval, func3	' now immval is between 0 and 15
+		'
+		' OK, we can emit
+		' rdlong rd, ptra[immval]
+		'
 		or	immval, #%1000_00000	' SUP mode for ptra[immval]
 		sets	opdata, immval
 		bith	opdata, #IMM_BITNUM	' change to imm mode
 		
 		jmp	#do_opdata_and_sign
-full_ldst_imm
-		neg	ptra_reg, #1		' trashing ptra, regrettably
-		and	immval, LOC_MASK
-		andn	locptra, LOC_MASK
-		or	locptra, immval
-		sets	addptra, rs1
-		mov	jit_instrptr, #locptra
+big_offset
+		sets	addptra+1, immval
+		shr	immval, #9
+		and	addptra, AUG_MASK
+		or	addptra, immval
+		mov	jit_instrptr, #addptra
 		call	#emit2
-
+		neg	ptra_reg, #1
 		mov	dest, #ptra	' use ptra for address
 final_ldst
 		'' now the actual rd/wr instruction
@@ -382,18 +384,15 @@ do_opdata_and_sign
 		mov	pb, #1
 		jmp	#jit_emit
 
-locptra
-		loc	ptra, #\0
-addptra
-		add	ptra, 0-0
 mov_to_ptra
 		mov	ptra, 0-0
-ioptra
-		rdlong  0-0, ptra
+addptra
+		add	ptra, ##0-0
 signext_instr
 		muxc	0-0, 0-0
 signmask
 		long	0
+locptra		loc	ptra, #\0
 
 wrpin_table
 		wrpin	0, 0

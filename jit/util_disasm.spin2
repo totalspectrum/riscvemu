@@ -171,3 +171,12 @@ if_ae	add	uart_char, #"A"-10
 	djnz	dis_cnt, #.digitloop
 	ret
 
+#include "disasm_tab.spin2"
+
+#ifdef DEBUG_ENGINE
+hub_print_newpc
+		mov	uart_char, #"="
+		call	#ser_tx
+		mov	uart_num, ptrb
+		jmp	#ser_hex
+#endif

@@ -23,10 +23,10 @@
       
    Theory of operation:
      We pre-compile instructions and run them from a cache.
-     Each RISC-V instruction maps to up to 4 PASM instructions.
+     Each RISC-V instruction maps to up to 4 P2 instructions.
      They run inline until the end of the cache, where we have to
-     have a return (probably through a _ret_ prefix). On return
-     the ptrb register contains the next pc we should execute;
+     have a jump back to the main interpreter code.
+     The ptrb register contains the next pc we should execute;
      this is initialized to the next pc after the cache, so if
      we fall through everything is good.
 }}
@@ -316,10 +316,10 @@ loadop
 	if_z	jmp	#emit_nop
 ldst_common
 		cmp	immval, #0 wz
-	if_nz	jmp	#maybe_full_ldst_imm
+	if_nz	jmp	#ldst_need_offset
 		mov	dest, rs1
 		jmp	#final_ldst
-maybe_full_ldst_imm
+ldst_need_offset
 		mov	temp, #15
 		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
 		' which is what we want

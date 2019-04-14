@@ -285,16 +285,15 @@ sltfunc_pat
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''
 '' load/store operations
 '' these look like:
-''     loc ptra, #immval
-''     add ptra, rs1
-''     rdlong rd, ptra wc
+''     mov ptra, rs1
+''     rdlong rd, ptra[##immval] wc
 ''     muxc rd, SIGNMASK (optional, only if wc set on prev. instruction)
 ''
 '' there are some special cases if the immediate value is small:
 ''    if immval == 0, just do rdlong rd, rs1 wc
 ''    if immval < 64 and we are a long word read, do:
 ''      mov ptra, rs1
-''      rdlong rd, ptra[immval/4]
+''      rdlong rd, ptra[immval/4] (skipping the augment)
 ''
 '' the opdata field has:
 ''   instruction set up for rd/write (load/store share most code)
@@ -344,7 +343,7 @@ skip_ptra_mov
 	if_a	jmp	#big_offset
 		shr	immval, func3	' now immval is between 0 and 15
 		'
-		' OK, we can emit
+		' OK, we can emit a simple
 		' rdlong rd, ptra[immval]
 		'
 		or	immval, #%1000_00000	' SUP mode for ptra[immval]
@@ -353,14 +352,23 @@ skip_ptra_mov
 		
 		jmp	#do_opdata_and_sign
 big_offset
-		sets	addptra+1, immval
+		'
+		' here we have a big offset
+		'
+		and	immval, LOC_MASK	' isolate offset 20 bits
+		sets	opdata, immval
+		setd	opdata, rd
+		bith	opdata, #IMM_BITNUM	' change to imm mode
+		mov	aug_io+1, opdata
+		
+		' set up the augmented prefix
 		shr	immval, #9
-		and	addptra, AUG_MASK
-		or	addptra, immval
-		mov	jit_instrptr, #addptra
+		andn	aug_io, ##$7ff	' clear out bottom 11 bits of augment
+		or	aug_io, immval
+		mov	jit_instrptr, #aug_io
 		call	#emit2
-		neg	ptra_reg, #1
-		mov	dest, #ptra	' use ptra for address
+		jmp	#check_for_signext
+		
 final_ldst
 		'' now the actual rd/wr instruction
 		'' opdata contains a template like
@@ -373,7 +381,7 @@ do_opdata_and_sign
 		setd	opdata, rd
 		mov	jit_instrptr, #opdata
 		call	#emit1
-
+check_for_signext
 		shr	signmask, #9
 		and	signmask, #$1ff wz	' check for sign mask
 		'' see if we need a sign extension instruction
@@ -386,13 +394,15 @@ do_opdata_and_sign
 
 mov_to_ptra
 		mov	ptra, 0-0
-addptra
-		add	ptra, ##0-0
+aug_io
+		rdlong	0-0, ##%1000_0000_00000000_00000000
+
 signext_instr
 		muxc	0-0, 0-0
 signmask
 		long	0
 locptra		loc	ptra, #\0
+addptra		add	ptra, 0-0
 
 wrpin_table
 		wrpin	0, 0

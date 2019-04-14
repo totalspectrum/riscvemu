@@ -154,6 +154,8 @@ cache_miss
 		call	#ser_hex
 #endif
 
+compile_line
+		call	#compile_bytecode_start_line
 compile_loop
 		call	#compile_bytecode
 ' done_instruction
@@ -184,22 +186,34 @@ jit_indirect_jump_pat
 '' the branch may be conditional
 '' based on the "condition" variable
 ''''''''''''''''''''''
+jit_branch_dest	long	0
+
 jit_emit_direct_branch
 		shl	jit_condition, #28 wz	' put condition in top part
+		' skip branch if condition is 0
+	if_z	jmp	#jit_emit_jump_to_ptrb
+		mov	jit_branch_dest, jit_instrptr	' FIXME
 		andn	jit_direct_jump_pat, jit_loc_mask
 		or     	jit_direct_jump_pat, jit_instrptr
 		andn	jit_direct_jump_pat+1, jit_cond_mask
 		or	jit_direct_jump_pat+1, jit_condition
 		mov	jit_instrptr, #jit_direct_jump_pat
-    if_nz	callpb 	#2, #jit_emit		' skip branch if condition is 0
+    		callpb 	#2, #jit_emit
 jit_finish_line
 #ifdef DEBUG_ENGINE
 		mov	uart_char, #"|"
 		call	#ser_tx
 #endif
+		' check for unconditional branch;
+		' if it is unconditional, go do it
 		cmp	jit_condition, jit_cond_mask wz
     if_z	jmp	jit_orig_cachepc+0
-    
+    		' for conditional:
+		' forward branches we assume not taken, so continue
+		' with the trace
+''		cmp	jit_branch_dest, ptrb wcz
+''	if_a	ret
+	
 jit_emit_jump_to_ptrb
 		'' emit another direct branch
 		mov	jit_instrptr, ptrb

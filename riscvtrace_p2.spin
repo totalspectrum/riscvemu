@@ -333,10 +333,16 @@ ldst_need_offset
 		'
 		' mov ptra, rs1
 		' wrbyte rd, ptra[immval]
+		' can skip the "mov" if ptra already holds
+		' rs1
+		cmp	ptra_reg, rs1 wz
+	if_z	jmp	#skip_ptra_mov
+		mov	ptra_reg, rs1
 		sets	mov_to_ptra, rs1
 		mov	jit_instrptr, #mov_to_ptra
 		call	#emit1
 		
+skip_ptra_mov
 		mov	signmask, opdata
 		shr	signmask, #9
 		and	signmask, #$1ff wz	' check for sign mask
@@ -346,6 +352,7 @@ ldst_need_offset
 		
 		jmp	#do_opdata_and_sign
 full_ldst_imm
+		neg	ptra_reg, #1		' trashing ptra, regrettably
 		and	immval, LOC_MASK
 		andn	locptra, LOC_MASK
 		or	locptra, immval
@@ -628,7 +635,7 @@ func2		long	0
 opdata
 divflags	long	0
 
-jmptabptr	long	0
+ptra_reg	long	-1	' register contained in ptra
 
 	''
 	'' opcode tables
@@ -717,6 +724,9 @@ emit4
 		'' code for doing compilation
 		'' called from the JIT engine loop
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+compile_bytecode_start_line
+		neg	ptra_reg, #1
+		ret
 compile_bytecode
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
@@ -737,7 +747,10 @@ compile_bytecode
 		mov	rd, opcode
 		shr	rd, #7
 		and	rd, #$1f
-
+		'' check for modifying ptra_reg
+		cmp	rd, ptra_reg wz
+	if_z	neg	ptra_reg, #1
+	
 		'' now look up in table
 		mov	temp, opcode
 		shr	temp, #2

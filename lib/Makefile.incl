@@ -70,6 +70,6 @@ p2header.bin: $(STUBSRC)
 	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
 	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=$(HDRSIZE)
 
-p2traceheader.bin: $(STUBSRC)
+p2traceheader.bin: $(STUBSRC) ../jit/jit_engine.spinh
 	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2traceheader.bin ../riscvtrace_p2.spin
 	dd if=/dev/null of=p2traceheader.bin bs=1 count=1 seek=$(HDRSIZE)

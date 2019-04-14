@@ -315,6 +315,7 @@ loadop
 		cmp	rd, #0	wz	' if rd == 0, emit nop
 	if_z	jmp	#emit_nop
 ldst_common
+		mov	signmask, opdata	' save if we need sign mask
 		cmp	immval, #0 wz
 	if_nz	jmp	#ldst_need_offset
 		mov	dest, rs1
@@ -343,9 +344,6 @@ ldst_need_offset
 		call	#emit1
 		
 skip_ptra_mov
-		mov	signmask, opdata
-		shr	signmask, #9
-		and	signmask, #$1ff wz	' check for sign mask
 		or	immval, #%1000_00000	' SUP mode for ptra[immval]
 		sets	opdata, immval
 		bith	opdata, #IMM_BITNUM	' change to imm mode
@@ -366,9 +364,6 @@ final_ldst
 		'' opdata contains a template like
 		''   rdword SIGNWORD, loadop wc
 		''
-		mov	signmask, opdata ' save potential sign mask
-		shr	signmask, #9
-		and	signmask, #$1ff wz ' remember if there is a sign mask
 		'' now change the opdata to look like
 		''   rdword rd, ptra
 		sets	opdata, dest
@@ -377,6 +372,8 @@ do_opdata_and_sign
 		mov	jit_instrptr, #opdata
 		call	#emit1
 
+		shr	signmask, #9
+		and	signmask, #$1ff wz	' check for sign mask
 		'' see if we need a sign extension instruction
 	if_z	ret
 		setd	signext_instr, rd

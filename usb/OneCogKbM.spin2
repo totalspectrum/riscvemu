@@ -2293,6 +2293,7 @@ usb_cache_end
 sz_usb_kbm_ver  byte    "v0.05", 0
 ' Current error state of the USB, posted by the USB_ERROR event. The error code
 ' will be one of the constants in the "Protocol error codes" enumeration.
+       	      	alignl
 usb_error_code  long    ERR_NONE
 '------------------------------------------------------------------------------
 ' Keyboard FIFO buffer.

@@ -14,6 +14,13 @@ extern void waitcnt(unsigned x);
 #define iprintf printf
 #define getcyclespersec() 80000000
 #endif
+#ifdef CATALINA
+#include <propeller.h>
+#define iprintf printf
+#define getcyclespersec() 80000000
+#define waitcnt(x) _waitcnt(x)
+#define getcnt() _cnt()
+#endif
 
 uint32_t testVector[] = {0x9d204ce7, 0xc03677f6, 0x320f0555, 0x499c703c,
                          0x8b8af399, 0x061b6314, 0x7d410085, 0xe65b712c,
@@ -26,11 +33,13 @@ char key[16] = "0123456789ABCDEF";
 #endif
 int blockSize = sizeof(testVector) / 4;
 
-void sleep(unsigned n)
+#ifndef CATALINA
+void sleep(unsigned int n)
 {
     clock_t end = n * getcyclespersec() + getcnt();
     waitcnt(end);
 }
+#endif
 
 int main(int argc, char* argv[])
 {

@@ -307,7 +307,9 @@ main ()
     printf ("\n");
 #endif
   }
-  
+#ifdef CATALINA
+  for(;;) ;
+#endif
 }
 
 

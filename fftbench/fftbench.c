@@ -35,15 +35,23 @@
 //
 
 #include <stdio.h>
+#ifdef CATALINA
+#include <time.h>
+#else
 #include <sys/time.h>
+#endif
 
-#ifdef __propeller__
+#if defined(__propeller__) || defined(CATALINA)
 #include <propeller.h>
 #define getcyclespersec() (80000000)
 #else
 extern unsigned int getcyclespersec();
 extern unsigned int getcnt();
 #define printf iprintf
+#endif
+
+#ifdef CATALINA
+#define getcnt() _cnt()
 #endif
 
 #ifdef _OPENMP
@@ -270,42 +278,49 @@ void butterflies(int32_t* bx, int32_t* by, int32_t firstLevel, int32_t lastLevel
     int32_t flightSize = 1 << firstLevel;
     int32_t wDelta = FFT_SIZE / (2 * (1 << firstLevel));
     int32_t noFlights = wDelta / slices;
-
+    int32_t level;
+    
     // Loop though the decimation levels
     // lastLevel is logN - 1
-    for (int32_t level = firstLevel; level <= lastLevel; level++) {
+    for (level = firstLevel; level <= lastLevel; level++) {
 
         int32_t flightIndex = 0;
+        int32_t flight;
+        
         // Loop through each flight on a level.
-        for (int32_t flight = 0; flight < noFlights; flight++) {
+        for (flight = 0; flight < noFlights; flight++) {
             int32_t wIndex = 0;
-
+            int32_t butterfly;
+            
             // Loop through butterflies within a flight.
-            for (int32_t butterfly = 0; butterfly < flightSize; butterfly++) {
+            for (butterfly = 0; butterfly < flightSize; butterfly++) {
                 int32_t b0 = flightIndex + butterfly;
                 int32_t b1 = b0 + flightSize;
-
+                int32_t a, b, c, d;
+                int32_t k1, k2, k3;
+                int32_t tx, ty;
+                
                 // Check that we are within our array slice
                 if ((b0 < 0) || (b0 >= slen)) rangeError = 1;
                 if ((b1 < 0) || (b1 >= slen)) rangeError = 1;
 
                 // At last...the butterfly.
                 // Get X[b1]
-                int32_t a = bx[b1];
-                int32_t b = by[b1];
+                a = bx[b1];
+                b = by[b1];
 
                 // Get W[wIndex]
-                int32_t c = wx[wIndex];
-                int32_t d = wy[wIndex];
+                c = wx[wIndex];
+                d = wy[wIndex];
 
                 // Somewhat optimized complex multiply
-                int32_t k1 = (a * (c + d)) >> 12;
+                k1 = (a * (c + d)) >> 12;
                 //     T = X[b1] * W[wIndex]
-                int32_t k2 = (d * (a + b)) >> 12;
-                int32_t k3 = (c * (b - a)) >> 12;
+                k2 = (d * (a + b)) >> 12;
+                k3 = (c * (b - a)) >> 12;
 
-                int32_t tx = k1 - k2;
-                int32_t ty = k1 + k3;
+                tx = k1 - k2;
+                ty = k1 + k3;
 
                 k1 = bx[b0];
                 k2 = by[b0];

@@ -99,8 +99,8 @@ DAT
 		' config area
 		orgh $10
 		long	   0
-		long	   23_000_000	' frequency
-		long	   0		' clock mode
+		long	   160_000_000	' frequency
+		long	   $010007f8	' clock mode
 		long	   230_400	' baud
 
 		orgh $40
@@ -112,7 +112,7 @@ x2		long	TOP_OF_MEM
 x3		nop
 
 x4		loc	ptrb, #\BASE_OF_MEM
-x5		rdlong	temp, #$18	' get old clock mode
+x5		mov	temp, #0	' get old clock mode
 x6		hubset	temp
 x7		mov	x1, #$1ff	' will count down
 
@@ -1291,7 +1291,6 @@ ser_init
 		waitx	##20_000_000/100  ' longer than necessary
 		hubset	##CLOCK_MODE+3
 
-		'hubset ##%0010_0000_0000_0000_0000_0000_0000_0000 ' try to unlock top of memory; does not seem to work
 		' clear write protect
 		mov	x4, ##7 + ((CYCLES_PER_SEC / BAUD) << 16) ' bitperiod
 		wrpin	##_txmode, #TX_PIN

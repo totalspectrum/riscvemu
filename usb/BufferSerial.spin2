@@ -1,0 +1,80 @@
+CON
+  RX_PIN = 63
+  
+DAT
+		''
+		'' simple serial buffer code
+		'' reads serial characters and places them into a buffer
+		'' in LUT memory
+		'' parameter == user read pointer; when the long here
+		'' is 0, write the next character in the buffer to it
+		'' (or -1 if buffer is empty)
+		''
+		
+		org 0
+entry
+		mov	dataptr, ptra
+loop
+		rdlong	tmp, dataptr wz
+	if_nz	jmp	#skip_write
+		'' dataptr was 0, so client is ready to receive
+		'' do we have data in the buffer?
+		cmp	bufhead, buftail wz
+	if_z	jmp	#skip_write	 ' no, nothing to write
+		rdlut	tmp, buftail
+		add	buftail, #1
+		wrlong	tmp, dataptr
+skip_write
+
+		'' now handle input
+		call	#ser_rx
+		cmp	uartchar, negone wz
+	if_e	jmp	#loop
+		or	uartchar, #$0100	' make sure it is non-zero
+		'' received a character
+		'' put it into the buffer if we can
+		mov    tmp, bufhead
+		add    tmp, #1
+		and    tmp, #$1ff
+		cmp    tmp, buftail wz
+	if_z	jmp    #loop	    ' buffer full, drop the character
+		wrlut  uartchar, bufhead
+		mov    bufhead, tmp
+		jmp    #loop
+
+bufhead		long	0
+buftail		long	0
+tmp		long	0
+dataptr		long	0
+negone		long	-1
+
+		'' receive a single character into uartchar
+		'' or set it to -1 if no character available
+uartchar	long  0
+
+ser_rx
+		mov	uartchar, negone
+		testp	#RX_PIN wc
+	if_c	rdpin	uartchar, #RX_PIN
+	if_c	shr	uartchar, #24
+		ret
+
+		fit	$1f0
+
+VAR
+	long	cog
+	long	data
+	
+PUB start
+  data := 0
+  cog := cognew(@entry, @data) + 1
+  return cog
+
+PUB rx : c
+  c := data
+  if (c == 0)
+    return -1
+  c &= $ff
+  data := 0
+  return c
+

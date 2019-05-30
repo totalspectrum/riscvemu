@@ -520,8 +520,8 @@ usb_host_start
                 cmp     htmp, ##168_000_000     wcz
         if_be   mov     utx_tweak, #0
         if_a    mov     utx_tweak, #20
-                mov     htmp, ##@hlut_end - 4           ' Dealing with hub addresses, so convert byte
-                sub     htmp, ##@hlut_start             ' addresses to the N - 1 longs required by SETQ2
+                mov     htmp, ##(@hlut_end - 4) - @hlut_start           ' Dealing with hub addresses, so convert byte
+''                sub     htmp, ##@hlut_start             ' addresses to the N - 1 longs required by SETQ2
                 shr     htmp, #2
                 loc     pb, #@hlut_start
                 setq2   htmp

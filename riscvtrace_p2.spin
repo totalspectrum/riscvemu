@@ -333,6 +333,10 @@ ldst_need_offset
 		mov	jit_instrptr, #mov_to_ptra
 		call	#emit1		
 skip_ptra_mov
+		'' check to see if we're about to trash the register we
+		'' think is in ptra
+		cmp	 rd, ptra_reg wz
+	if_z	neg	 ptra_reg, #1
 		'' see if this is a short offset
 		mov	temp, #15
 		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
@@ -730,9 +734,11 @@ emit4
 		'' code for doing compilation
 		'' called from the JIT engine loop
 		''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+		'' utility called at start of line
 compile_bytecode_start_line
-		neg	ptra_reg, #1
-		ret
+	_ret_	neg	ptra_reg, #1
+
+		'' compile one opcode
 compile_bytecode
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
@@ -785,6 +791,7 @@ jit_cacheptr	long	0
 jit_cachepc	long	0
 jit_orig_cachepc
 		long	0
+jit_orig_ptrb	long	0
 jit_temp	long	0
 jit_temp2	long	0
 jit_condition	long	0

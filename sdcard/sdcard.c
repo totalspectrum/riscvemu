@@ -73,9 +73,11 @@ static int spi_read()
     return r;
 }
 
+#define TIMEOUT 160000000
+
 static int spi_chktimeout(uint32_t starttime) {
     uint32_t now = getcnt();
-    if (now - starttime > 50000000) {
+    if (now - starttime > TIMEOUT) {
         return 1;
     }
     return 0;
@@ -112,22 +114,40 @@ static void spi_send(int outv)
     drvh_(PIN_MOSI);
 }
 
+int crc7(int crc, int val)
+{
+    int i;
+    for (i = 0; i < 8; i++) {
+        crc = crc << 1;
+        if ( (crc^val) & 0x80 ) {
+            crc ^= 0x09;
+        }
+        val = val<<1;
+    }
+    return crc & 0x7f;
+}
+
+int crc_send(int crc, int byte)
+{
+    crc = crc7(crc, byte);
+    spi_send(byte);
+    return crc;
+}
+
 int spi_cmd(int index, int arg)
 {
+    int crc = 0;
     drvl_(PIN_SS);
     (void)spi_read();
-    spi_send(0x40+index);
-    spi_send((arg >> 24) & 0xff);
-    spi_send((arg >> 16) & 0xff);
-    spi_send((arg >> 8) & 0xff);
-    spi_send(arg & 0xff);
+    crc = crc_send(crc, 0x40+index);
+    crc = crc_send(crc, (arg >> 24) & 0xff);
+    crc = crc_send(crc, (arg >> 16) & 0xff);
+    crc = crc_send(crc, (arg >> 8) & 0xff);
+    crc = crc_send(crc, arg & 0xff);
 
-    // CRC; this only matters for a few commands
-    if (index == 0) {
-        spi_send(0x95);
-    } else {
-        spi_send(0x87);
-    }
+    // send the CRC
+    crc = (crc<<1) | 1;
+    spi_send(crc);
     return spi_readresp();
 }
 
@@ -181,7 +201,10 @@ bool sdcard_init(void)
     if (i) {
         iprintf("could not init card\n");
         return false;
+    } else {
+        iprintf("cmd58 returned 0x%x\n", x);
     }
+        
     return true;
 }
 
@@ -196,8 +219,7 @@ uint64_t sdcard_get_capacity_in_bytes(void)
     uint64_t c_size;
     uint8_t csd[16]; // 16 bytes
     int i;
-    spi_cmd(9, 0);
-    i = spi_readresp();
+    i = spi_cmd(9, 0);
     if (i < 0) {
         iprintf("csd read timed out\n");
         spi_endcmd();
@@ -245,7 +267,7 @@ void main()
     }
     ok = sdcard_init();
     if (ok) {
-        iprintf("sdcard OK\n");
+        iprintf("sdcard OK: SDHC = %u\n", (int)card.isSDHC);
         bytes = sdcard_get_capacity_in_bytes();
         iprintf("capacity= %llu bytes (%lu MB)\n", bytes, (uint32_t)(bytes / (1024*1024ULL)));
     } else {

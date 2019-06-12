@@ -16,6 +16,10 @@
 #define PIN_CLK  61
 #define PIN_TEST (PIN_MOSI)
 
+struct cardstate {
+    bool isSDHC;
+} card;
+
 extern void iprintf(const char *, ...);
 
 uint64_t getcycles()
@@ -27,6 +31,17 @@ again:
     hi = getcnth();
     if (hi != h2) goto again;
     return ((uint64_t)hi) << 32 | lo;
+}
+
+void nap(uint64_t cycles)
+{
+    uint64_t now;
+    uint64_t end;
+    now = getcycles();
+    end = now + cycles;
+    do {
+        now = getcycles();
+    } while (now < end);
 }
 
 #define spi_short_delay() waitcnt(getcnt() + 10)
@@ -160,10 +175,9 @@ bool sdcard_init(void)
         }
     }
     i = spi_cmd(58, 0);
-    if (i >= 0) {
-        x = spi_read();
-    }
+    x = spi_read();
     spi_endcmd();
+    card.isSDHC = (x >> 6) & 1;
     if (i) {
         iprintf("could not init card\n");
         return false;
@@ -179,7 +193,29 @@ bool sdcard_is_present(void)
 
 uint64_t sdcard_get_capacity_in_bytes(void)
 {
-    return 0;
+    uint64_t c_size;
+    uint8_t csd[16]; // 16 bytes
+    int i;
+    spi_cmd(9, 0);
+    i = spi_readresp();
+    if (i < 0) {
+        iprintf("csd read timed out\n");
+        spi_endcmd();
+        return 0;
+    }
+    iprintf("csd: ");
+    for (i = 0; i < 16; i++) {
+        csd[i] = spi_read();
+        iprintf("%02x ", csd[i]);
+    }
+    (void)spi_read();
+    (void)spi_read();
+    iprintf("\n");
+    spi_endcmd();
+
+    c_size = (((uint32_t)csd[7] & 0x3f) << 16) | ((uint32_t)csd[8] << 8) | csd[9];
+    c_size = (c_size+1) * 512ULL * 1024ULL;
+    return c_size;
 }
 
 // these return 0 on success, non-zero on error
@@ -192,22 +228,13 @@ uint32_t sdcard_write_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blo
     return -1;
 }
 
-void nap(uint64_t cycles)
-{
-    uint64_t now;
-    uint64_t end;
-    now = getcycles();
-    end = now + cycles;
-    do {
-        now = getcycles();
-    } while (now < end);
-}
-
 void main()
 {
     bool ok;
+    uint64_t bytes;
 
-    nap(40000000);
+    iprintf("sdcard test program\n");
+
     for(;;) {
         ok = sdcard_is_present();
         iprintf("sdcard is %spresent\n", ok ? "" : "NOT ");
@@ -219,6 +246,8 @@ void main()
     ok = sdcard_init();
     if (ok) {
         iprintf("sdcard OK\n");
+        bytes = sdcard_get_capacity_in_bytes();
+        iprintf("capacity= %llu bytes (%lu MB)\n", bytes, (uint32_t)(bytes / (1024*1024ULL)));
     } else {
         iprintf("error\n");
     }

@@ -59,7 +59,8 @@ static int spi_read()
     return r;
 }
 
-#define TIMEOUT 160000000
+// timeout is 100ms if we use a 160 MHz clock
+#define TIMEOUT 16000000
 
 static int spi_chktimeout(uint64_t endtime) {
     uint64_t now = getcycles();
@@ -142,6 +143,22 @@ void spi_endcmd(void)
     drvh_(PIN_SS);
 }
 
+int sdcard_wait_for_status(void)
+{
+    int tries = 0;
+    int i;
+    while (tries++ < 100) {
+        spi_cmd(13, 0);
+        i = spi_readresp();
+        spi_endcmd();
+        if (i == 0) {
+//            iprintf("wait worked on try %d\n", tries);
+            return 0;
+        }
+    }
+    return -1;
+}
+
 bool sdcard_init(void)
 {
     int i;
@@ -188,7 +205,11 @@ bool sdcard_init(void)
     } else {
         iprintf("cmd58 returned 0x%x\n", x);
     }
-        
+    i = sdcard_wait_for_status();
+    if (i < 0) {
+        iprintf("timeout waiting for card\n");
+        return false;
+    }
     return true;
 }
 
@@ -200,11 +221,11 @@ bool sdcard_is_present(void)
 
 static void sdcard_print_status(void)
 {
-    int i, j;
-    i = spi_cmd(13, 0);
-    j = spi_read();
-    iprintf("send status returned: 0x%x 0x%x\n", i, j);
+    int i;
+    spi_cmd(13, 0);
+    i = spi_readresp();
     spi_endcmd();
+    iprintf("send status returned: 0x%x\n", i);
 }
 
 uint64_t sdcard_get_capacity_in_bytes(void)
@@ -236,20 +257,67 @@ uint64_t sdcard_get_capacity_in_bytes(void)
     return c_size;
 }
 
+// read one block
+static int sdcard_read_one_block(uint8_t *dest, uint32_t offset)
+{
+    int r, i;
+    if (!card.isSDHC) {
+        offset = offset << 9; // multiply by 512 for non SDHC cards
+    }
+    spi_cmd(17, offset);
+    r = spi_readresp();
+    if (r < 0) return r;
+    for (i = 0; i < 512; i++) {
+        *dest++ = spi_read();
+    }
+    spi_read(); spi_read();
+    spi_endcmd();
+    return 0;
+}
+
 // these return 0 on success, non-zero on error
-uint32_t sdcard_read_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks)
+uint32_t sdcard_read_blocks(uint8_t *dest, uint32_t start_block, uint32_t num_blocks)
+{
+    uint32_t i;
+    int r;
+    for (i = 0; i < num_blocks; i++) {
+        r = sdcard_read_one_block(dest, start_block);
+        if (r) return r;
+        dest += 512;
+        start_block++;
+    }
+    return 0;
+}
+
+uint32_t sdcard_write_blocks(uint8_t *dest, uint32_t start_block, uint32_t num_blocks)
 {
     return -1;
 }
-uint32_t sdcard_write_blocks(uint8_t *dest, uint32_t block_num, uint32_t num_blocks)
+
+uint8_t ibuf[1024];
+
+static void print_buf(uint8_t *buf, int siz)
 {
-    return -1;
+    int i;
+    for (i = 0; i < siz; i++) {
+        if (0 == (i % 16)) {
+            iprintf("%04x: ", i);
+        }
+        iprintf("%02x", buf[i]);
+        if (15 == (i % 16)) {
+            iprintf("\n");
+        } else {
+            iprintf(" ");
+        }
+    }
+    iprintf("\n");
 }
 
 void main()
 {
     bool ok;
     uint64_t bytes;
+    int i;
     
     iprintf("sdcard test program\n");
 
@@ -268,5 +336,11 @@ void main()
         iprintf("capacity=%lu MB\n", (uint32_t)(bytes / (1024*1024ULL)));
     } else {
         iprintf("error\n");
+    }
+    i = sdcard_read_blocks(ibuf, 0, 2);
+    if (i) {
+        iprintf("error %d from read\n", i);
+    } else {
+        print_buf(ibuf, 512);
     }
 }

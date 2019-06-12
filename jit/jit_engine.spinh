@@ -1,10 +1,3 @@
-#ifdef USE_LUT_CACHE
-#define CACHE_TAG_SIZE $40
-#else
-'' this assumes we use the whole LUT for cache tags
-#define CACHE_TAG_SIZE $100
-#endif
-
 {{
    JIT engine for P2
    Copyright 2019 Total Spectrum Software Inc.
@@ -21,6 +14,22 @@
    space, we close out the cache line then jump to it.
 }}
 
+{ each cache tag contains an 20 bit address (long address of the Risc-V PC) and
+  a 12 bit offset into LUT memory; that offset is multiplied by 16 and added to
+  the cache base to give a cache base address
+  this is arranged as the 12 bit offset, followed by the 20 bit address, so that
+  we can extract the address with "and" of the lut mask
+}
+#ifdef USE_LUT_CACHE
+#define CACHE_TAG_SIZE $40
+#define CACHE_OFFSET_ALIGN 2
+#define CACHE_OFFSET_SHIFT 1
+#else
+'' this assumes we use the whole LUT for cache tags
+#define CACHE_TAG_SIZE $200
+#define CACHE_OFFSET_ALIGN 16
+#define CACHE_OFFSET_SHIFT 4
+#endif
 { Initialize the cache
   Must be called from VM startup, and is called again whenever the
   cache overflows.
@@ -32,12 +41,11 @@ jit_init
 jit_reinit_cache
 	neg	jit_temp, #1
 	mov	pb, #0
-	rep	@.endloop, #CACHE_TAG_SIZE
+	rep	@.endloop, ##CACHE_TAG_SIZE
 	wrlut	jit_temp, pb
 	add	pb, #1
 .endloop
-	mov	jit_cachepc, jit_base_of_cache_mem
-	ret
+ _ret_	mov	jit_cachepc, jit_base_of_cache_mem
 	
 {
    Set the PC to ptrb. This should be called from the VM at startup,
@@ -68,15 +76,18 @@ jit_trampoline_set_pc
 		mov    jit_instr, ptrb
 		shr    jit_instr, #2
 		and    jit_instr, #CACHE_TAG_SIZE-1
-		rdlut	jit_temp, jit_instr		' fetch cached trace
+		rdlut	jit_temp, jit_instr		' fetch cache data
+		mov	jit_orig_cachepc, jit_temp	' save a copy
+		and	jit_temp, jit_loc_mask
 		cmp	jit_temp, ptrb wz		' does it match our PC?
     if_nz	jmp	#cache_miss 		' if not in cache, recompile
 
     		'' code for a cache hit
 		'' if a cache hit, just load the cached address
 		'' into orig_cachepc
-		add	jit_instr, #CACHE_TAG_SIZE
-		rdlut	jit_orig_cachepc, jit_instr
+		andn	jit_orig_cachepc, jit_loc_mask
+		shr	jit_orig_cachepc, #(20-CACHE_OFFSET_SHIFT)
+		add	jit_orig_cachepc, jit_base_of_cache_mem
 
 		'' if pb is <> 0, then it's a return address from
 		'' the instruction that came here; fix that instruction
@@ -140,10 +151,16 @@ cache_miss
 
     if_be	call	#jit_reinit_cache
 
-    		wrlut	ptrb, jit_instr		' update cached pc
+    		' align jit_cachepc on a valid boundary
+    		add	jit_cachepc, #CACHE_OFFSET_ALIGN-1
+		andn	jit_cachepc, #CACHE_OFFSET_ALIGN-1
 		mov	jit_orig_cachepc, jit_cachepc	' save the starting cachepc
-		add	jit_instr, #CACHE_TAG_SIZE
-		wrlut	jit_orig_cachepc, jit_instr
+		' update cache tag
+		mov	jit_temp, jit_orig_cachepc
+		sub	jit_temp, jit_base_of_cache_mem
+		shl	jit_temp, #(20-CACHE_OFFSET_SHIFT)
+		or	jit_temp, ptrb
+    		wrlut	jit_temp, jit_instr		' update cached pc
 #ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #">"
 		call	#ser_tx
@@ -293,12 +310,12 @@ jit_loc_mask	long	$000fffff	' 20 bits
 
 #ifdef USE_LUT_CACHE
 jit_base_of_cache_mem
-		long	$280
+		long	$200 + CACHE_TAG_SIZE
 jit_top_of_cache_mem
-		long	$3f8
+		long	$400 - 8
 #else
 jit_base_of_cache_mem
-		long	$78000
+		long	TOP_OF_MEM
 jit_top_of_cache_mem
-		long	$7c000
+		long	$80000 - 8
 #endif

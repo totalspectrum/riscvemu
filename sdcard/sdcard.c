@@ -46,20 +46,6 @@ void nap(uint64_t cycles)
 
 #define spi_short_delay() waitcnt(getcnt() + 10)
 
-//
-// assume 160 MHz; then delay 160 -> 1 MHz, 1600 -> 10 KHz
-//
-static void delay_us(uint32_t us)
-{
-    us = 160 * us;
-    waitcnt(getcnt() + us);
-}
-
-static void spi_delay(void)
-{
-    delay_us(5);
-}
-
 static int spi_read()
 {
     int i, r;
@@ -75,9 +61,9 @@ static int spi_read()
 
 #define TIMEOUT 160000000
 
-static int spi_chktimeout(uint32_t starttime) {
-    uint32_t now = getcnt();
-    if (now - starttime > TIMEOUT) {
+static int spi_chktimeout(uint64_t endtime) {
+    uint64_t now = getcycles();
+    if (now > endtime) {
         return 1;
     }
     return 0;
@@ -86,12 +72,12 @@ static int spi_chktimeout(uint32_t starttime) {
 static int spi_readresp(void)
 {
     int r;
-    uint32_t starttime = getcnt();
+    uint64_t endtime = getcycles() + TIMEOUT;
     
     while (1) {
         r = spi_read();
         if (r != 0xff) break;
-        if (spi_chktimeout(starttime)) {
+        if (spi_chktimeout(endtime)) {
             return -1;
         }
     }
@@ -162,8 +148,6 @@ bool sdcard_init(void)
     int x;
     int retries;
 
-    delay_us(1000);
-    
     dirl_(PIN_MISO);
     dirh_(PIN_CLK);
     dirh_(PIN_MOSI);
@@ -214,12 +198,24 @@ bool sdcard_is_present(void)
     return (i == 0);
 }
 
+static void sdcard_print_status(void)
+{
+    int i, j;
+    i = spi_cmd(13, 0);
+    j = spi_read();
+    iprintf("send status returned: 0x%x 0x%x\n", i, j);
+    spi_endcmd();
+}
+
 uint64_t sdcard_get_capacity_in_bytes(void)
 {
     uint64_t c_size;
     uint8_t csd[16]; // 16 bytes
     int i;
+
+    sdcard_print_status();
     i = spi_cmd(9, 0);
+    i = spi_readresp();
     if (i < 0) {
         iprintf("csd read timed out\n");
         spi_endcmd();
@@ -236,7 +232,7 @@ uint64_t sdcard_get_capacity_in_bytes(void)
     spi_endcmd();
 
     c_size = (((uint32_t)csd[7] & 0x3f) << 16) | ((uint32_t)csd[8] << 8) | csd[9];
-    c_size = (c_size+1) * 512ULL * 1024ULL;
+    c_size = (c_size+1) * (512ULL * 1024ULL);
     return c_size;
 }
 
@@ -254,7 +250,7 @@ void main()
 {
     bool ok;
     uint64_t bytes;
-
+    
     iprintf("sdcard test program\n");
 
     for(;;) {
@@ -269,7 +265,7 @@ void main()
     if (ok) {
         iprintf("sdcard OK: SDHC = %u\n", (int)card.isSDHC);
         bytes = sdcard_get_capacity_in_bytes();
-        iprintf("capacity= %llu bytes (%lu MB)\n", bytes, (uint32_t)(bytes / (1024*1024ULL)));
+        iprintf("capacity=%lu MB\n", (uint32_t)(bytes / (1024*1024ULL)));
     } else {
         iprintf("error\n");
     }

@@ -653,16 +653,16 @@ ptra_reg	long	-1	' register contained in ptra
 start_of_tables
 ''''' math indirection table
 '' upper bits are acutlly instructions we wish to use
-'' dest bits contain flags: 2 -> test for shr/sar 
+'' dest bits contain flags: 1 -> operation is commutative
 mathtab
-		add	0,regfunc    wz	' wz indicates we want add/sub
+		add	1,regfunc    wz	' wz indicates we want add/sub
 		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
 		cmps	0,sltfunc    wcz
 		cmp	0,sltfunc    wcz
-		xor	0,regfunc
+		xor	1,regfunc
 		shr	0,regfunc    wc	' wc indicates we want shr/sar
-		or	0,regfunc
-		and	0,regfunc
+		or	1,regfunc
+		and	1,regfunc
 loadtab
 		rdbyte	SIGNBYTE, loadop wc
 		rdword	SIGNWORD, loadop wc

@@ -81,6 +81,7 @@ x14		call	#jit_init
 x15		jmp	#startup
 
 x16		long	0[16]
+
 		'' these registers must immediately follow x0-x31
 x32
 opcode		long	0
@@ -173,7 +174,6 @@ regfunc
 nosar
 		'' check for immediates
 		test	opcode, #$20 wz
-		andn	opdata, #$1ff	' zero out source in template instruction
 	if_nz	jmp	#reg_reg
 		bith	opdata, #IMM_BITNUM
 
@@ -210,6 +210,20 @@ reg_reg
 	if_c	mov	opdata, subdata
 nosub
 		'
+		' compiling OP rd, rs1, rs2
+		'
+
+		' if commutative and rd == rs2, we can compile
+		'   OP rd, rs1
+		'
+		testb	opdata, #9 wc
+	if_nc	jmp	#not_commutative
+		cmp	rd, rs2 wz
+	if_nz	jmp	#not_commutative
+		mov	rs2, rs1
+		mov	rs1, rd		' same as old rs2
+		jmp	#noaltr
+not_commutative
 		' if rd is not the same as rs1, we have
 		' to issue an ALTR 0, #rd
 		'

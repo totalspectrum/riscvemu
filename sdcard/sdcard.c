@@ -101,7 +101,7 @@ static void spi_send(int outv)
     drvh_(PIN_MOSI);
 }
 
-int crc7(int crc, int val)
+static int crc7(int crc, int val)
 {
     int i;
     for (i = 0; i < 8; i++) {
@@ -114,14 +114,14 @@ int crc7(int crc, int val)
     return crc & 0x7f;
 }
 
-int crc_send(int crc, int byte)
+static int crc_send(int crc, int byte)
 {
     crc = crc7(crc, byte);
     spi_send(byte);
     return crc;
 }
 
-int spi_cmd(int index, int arg)
+static int spi_cmd(int index, int arg)
 {
     int crc = 0;
     drvl_(PIN_SS);
@@ -138,7 +138,7 @@ int spi_cmd(int index, int arg)
     return spi_readresp();
 }
 
-void spi_endcmd(void)
+static void spi_endcmd(void)
 {
     drvh_(PIN_SS);
 }

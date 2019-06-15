@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-#define USE_LUT_CACHE
+'#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -273,7 +273,7 @@ altr_op
 ''    call #routine
 ''    mov <rd>, dest
 multab
-	call	#\imp_mul
+	long	0	' special case ' call	#\imp_mul
 	call	#\illegalinstr
 	call	#\illegalinstr
 	call	#\imp_muluh
@@ -281,7 +281,12 @@ multab
 	call	#\imp_divu
 	call	#\imp_rem
 	call	#\imp_remu
-	
+
+imp_mul
+	qmul	rs1, rs2
+    	getqx	rd
+
+
 mul_templ
 	mov	rs1, 0-0
 	mov	rs2, 0-0
@@ -767,10 +772,6 @@ startup
 '=========================================================================
 ' MATH ROUTINES
 '=========================================================================
-imp_mul
-		qmul	rs1, rs2
-    _ret_	getqx	rd
-
 imp_muluh
 		qmul	rs1, rs2
     _ret_	getqy	rd
@@ -925,14 +926,21 @@ emit_big_instr
 '
 hub_muldiv
 	alts	func3, #multab
-	mov	temp, 0-0
+	mov	temp, 0-0 wz
+if_z	jmp	#handle_mul
 	sets	mul_templ, rs1
 	sets	mul_templ+1, rs2
 	mov	mul_templ+2, temp
 	setd	mul_templ+3, rd
 	mov	jit_instrptr, #mul_templ
 	jmp	#emit4
-	
+handle_mul
+	sets	imp_mul, rs1
+	setd	imp_mul, rs2
+	setd	imp_mul+1, rd
+	mov	jit_instrptr, #imp_mul
+	jmp	#emit2
+
 		' handle addi instruction specially
 		' if we get addi R, x0, N
 		' we emit mov R, #N instead

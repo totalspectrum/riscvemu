@@ -1,5 +1,5 @@
-#define DEBUG_ENGINE
-#define USE_DISASM
+'#define DEBUG_ENGINE
+'#define USE_DISASM
 #define USE_LUT_CACHE
 
 {{
@@ -840,10 +840,14 @@ skip_ptra_mov
 		' note: low bits of func3 == 0 for byte, 1 for word, 2 for long
 		' which is what we want
 		and	func3, #3
-		shl	temp, func3
-		cmp	immval, temp wcz
+		mov	temp, immval
+		sar	temp, func3
+		cmps	temp, #15 wcz
 	if_a	jmp	#big_offset
-		shr	immval, func3	' now immval is between 0 and 15
+		cmps	temp, ##-15 wcz
+	if_b	jmp	#big_offset
+		and	temp, #$1f
+		mov	immval, temp
 		'
 		' OK, we can emit a simple
 		' rdlong rd, ptra[immval]

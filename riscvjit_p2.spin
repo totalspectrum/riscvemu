@@ -102,8 +102,8 @@ DAT
 		' config area
 		orgh $10
 		long	   0
-		long	   160_000_000	' frequency
-		long	   $010007f8	' clock mode
+		long	   23_000_000	' frequency
+		long	   0		' clock mode
 		long	   230_400	' baud
 
 		orgh $40
@@ -1305,8 +1305,10 @@ ser_init
 		hubset	##CLOCK_MODE
 		waitx	##20_000_000/100  ' longer than necessary
 		hubset	##CLOCK_MODE+3
-
-		' clear write protect
+		wrlong	##CYCLES_PER_SEC, #$14
+		wrlong	##CLOCK_MODE, #$18
+		
+		' set up serial
 		mov	x4, ##7 + ((CYCLES_PER_SEC / BAUD) << 16) ' bitperiod
 		wrpin	##_txmode, #TX_PIN
 		wxpin	x4, #TX_PIN

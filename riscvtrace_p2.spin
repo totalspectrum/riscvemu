@@ -935,8 +935,8 @@ if_z	jmp	#handle_mul
 	mov	jit_instrptr, #mul_templ
 	jmp	#emit4
 handle_mul
-	sets	imp_mul, rs1
-	setd	imp_mul, rs2
+	setd	imp_mul, rs1
+	sets	imp_mul, rs2
 	setd	imp_mul+1, rd
 	mov	jit_instrptr, #imp_mul
 	jmp	#emit2

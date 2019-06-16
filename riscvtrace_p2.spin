@@ -182,18 +182,25 @@ nosar
 	if_nz	jmp	#reg_reg
 		bith	opdata, #IMM_BITNUM
 
-		' special case: addi xa, x0, N
-		' can be translated as mv x0, N
-		' we can tell it's an add because it will have WZ_BITNUM set
-		testb	opdata, #WZ_BITNUM wc
-	if_c	jmp	#hub_handle_addi
-
 		' special case:
 		' xori rA, rB, #-1
 		' -> not rA, rB
 		testb	opdata, #XOR_CHECK_BITNUM wc
 	if_c	jmp	#check_xor
 
+		' special case: addi xa, x0, N
+		' can be translated as mv x0, N
+		' we can tell it's an add because it will have WZ_BITNUM set
+		testb	opdata, #WZ_BITNUM wc
+	if_nc	jmp	#continue_imm
+		' for addi
+		cmps	immval, #0 wcz
+	if_z	jmp	#emit_mov_rd_rs1
+	if_b	jmp	#handle_subi
+		cmp	rs1, #x0 wz
+	if_z	mov	dest, rd
+	if_z	jmp	#emit_mvi
+	
 		'
 		' emit an immediate instruction with optional large prefix
 		' and with dest being the result
@@ -941,6 +948,7 @@ handle_mul
 	mov	jit_instrptr, #imp_mul
 	jmp	#emit2
 
+#ifdef NEVER
 		' handle addi instruction specially
 		' if we get addi R, x0, N
 		' we emit mov R, #N instead
@@ -954,7 +962,8 @@ hub_handle_addi
 	if_z	mov	dest, rd
 	if_z	jmp	#emit_mvi
 		jmp	#continue_imm
-		
+#endif
+
 		' convert addi A, B, -N to sub A, B, N
 handle_subi
 		neg	immval

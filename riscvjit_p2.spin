@@ -14,6 +14,9 @@
       7Fx - COG registers 1F0-1FF
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
+      BC2 - debug register
+      BC3 - millisecond counter
+      
       C00 - cycle counter
       C80 - cycle counter high
       
@@ -813,6 +816,9 @@ coginit_pattern
 		
 calldebug
 		call	#\debug_print
+callmillis
+		call	#\getmillis	' get milliseconds into dest
+		mov	0-0, dest
 getct_pat
 		getct	0-0
 getcth_pat
@@ -1259,6 +1265,15 @@ not_wait
 		mov	opptr, #calldebug
 		jmp	#emit1
 not_debug
+		cmp	immval, #$1C3 wz	' get millisecond count
+	if_nz	jmp	#not_millis
+		cmp	rd, #0 wz
+	if_z	jmp	#emit_nop
+	
+		mov	opptr, #callmillis
+		setd	callmillis+1, rd
+		jmp	#emit2
+not_millis
 		jmp	#illegalinstr
 
 		'' print single character in uartchar
@@ -1336,6 +1351,19 @@ illegal_instr_error
 		call	#ser_hex
 die
 		jmp	#die
+
+		' calculate elapsed milliseconds into dest
+getmillis
+		mov	dest, cycleh
+		getct	temp
+		cmp	dest, cycleh wz
+	if_nz	jmp	#getmillis
+		' now we have a 64 bit number (dest, cycleh)
+		' want to divide this by 160_000 to get milliseconds
+		setq	dest
+		qdiv	temp, ##(CYCLES_PER_SEC/1000)
+		getqx	dest
+		ret
 
 		' create a checksum of memory
 		' (info1, info2) are checksum

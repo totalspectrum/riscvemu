@@ -34,6 +34,7 @@ xxtea - xxtea benchmark
 riscvemu.spin is the P1 emulator (the guts are in PASM, of course)
 riscvemu_p2.spin is a P2 version of the emulator
 riscvjit_p2.spin is an advanced P2 version that compiles to P2 code
+riscvtrace_p2.spin is another JIT that uses a difference caching scheme
 debug.spin is a top level test harness for the emulators
 ```
 
@@ -247,9 +248,6 @@ the RISC-V. When it does so, the registers will be re-read. If the
 this many times before stopping again. If it is 0 it will run continuously.
 
 The JIT compiler is much simpler, and does not have the debug interface. It's
-a pure PASM program and hence only requires one COG (the other emulators use
+a pure PASM program and hence only requires one COG (the riscvemu emulators use
 two COGs, one for the debug stub and one for the Risc-V emulation).
-
-
-
 

@@ -203,12 +203,13 @@ jit_indirect_jump_pat
 jit_branch_dest	long	0
 
 jit_emit_direct_branch
+		mov	jit_branch_dest, jit_instrptr	' FIXME
+
 		shl	jit_condition, #28 wz	' put condition in top part
 		' skip branch if condition is 0
 	if_z	jmp	#jit_emit_jump_to_ptrb
-		mov	jit_branch_dest, jit_instrptr	' FIXME
 		andn	jit_direct_jump_pat, jit_loc_mask
-		or     	jit_direct_jump_pat, jit_instrptr
+		or     	jit_direct_jump_pat, jit_branch_dest
 		andn	jit_direct_jump_pat+1, jit_cond_mask
 		or	jit_direct_jump_pat+1, jit_condition
 		mov	jit_instrptr, #jit_direct_jump_pat

@@ -155,10 +155,26 @@
 
 #define cognew(a, b) coginit(0x10, a, b)
 
-#define cogstop(a)                                     \
+#define getrnd()                                        \
     ({                                                  \
         unsigned long v;                                \
-        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x3" \
+        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %0, x27" \
+                              : "=r"(v)  );    \
+        v;                                              \
+    })
+
+#define waitx(a)                                     \
+    ({                                                  \
+        unsigned long v;                                \
+        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x31" \
+                              : "=r"(v) : "r"(a)  );    \
+        v;                                                  \
+    })
+
+#define waitx(a)                                     \
+    ({                                                  \
+        unsigned long v;                                \
+        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x31" \
                               : "=r"(v) : "r"(a)  );    \
         v;                                                  \
     })

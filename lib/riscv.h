@@ -156,6 +156,14 @@
 
 #define cognew(a, b) coginit(0x10, a, b)
 
+#define cogstop(a)                                     \
+    ({                                                  \
+        unsigned long v;                                \
+        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x3" \
+                              : "=r"(v) : "r"(a)  );    \
+        v;                                                  \
+    })
+
 #define getrnd()                                        \
     ({                                                  \
         unsigned long v;                                \

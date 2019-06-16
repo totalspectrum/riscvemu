@@ -66,6 +66,9 @@ See lib/riscv.h for some useful utility macros.
   BC1 - wait register; if a value is written here we wait until the
         cycle counter matches it
   BC2 - debug register, used for internal debug purposes
+  BC3 - millisecond counter: unsigned 32 bit count of elapsed milliseconds
+        this is generated from the 64 bit cycle counter using fast
+	64 bit division
   7Fx - COG registers 1F0 - 1FF
 ```
 

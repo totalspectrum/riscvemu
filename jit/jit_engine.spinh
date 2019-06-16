@@ -201,39 +201,57 @@ jit_indirect_jump_pat
 '' based on the "condition" variable
 ''''''''''''''''''''''
 jit_branch_dest	long	0
+jit_branch_alt	long	0
 
 jit_emit_direct_branch
-		mov	jit_branch_dest, jit_instrptr	' FIXME
+		mov	jit_branch_alt, ptrb
 
+#ifdef NEVER
+		'' theoretically this would improve performance by speeding up the
+		'' default case (not taken forward branch)
+		'' in practice it seems to slow things down
+		cmp	ptrb, jit_branch_dest wcz	' check for forwards branch
+	if_be	xor	jit_condition, #$f
+	if_be	mov	jit_branch_alt, jit_branch_dest
+	if_be	mov	jit_branch_dest, ptrb
+#endif
+
+jit_do_emit
 		shl	jit_condition, #28 wz	' put condition in top part
 		' skip branch if condition is 0
-	if_z	jmp	#jit_emit_jump_to_ptrb
+	if_z	jmp	#jit_emit_jump_to_alt
+
+jit_direct_emit
 		andn	jit_direct_jump_pat, jit_loc_mask
 		or     	jit_direct_jump_pat, jit_branch_dest
 		andn	jit_direct_jump_pat+1, jit_cond_mask
 		or	jit_direct_jump_pat+1, jit_condition
 		mov	jit_instrptr, #jit_direct_jump_pat
     		callpb 	#2, #jit_emit
+
+		' check for unconditional branch;
+		' if it is unconditional, go do it
+		cmp	jit_condition, jit_cond_mask wz
+    if_z	jmp	jit_orig_cachepc+0
+
+jit_emit_jump_to_alt
+    		'' now emit another branch to jit_branch_alt
+		andn	jit_direct_jump_pat, jit_loc_mask
+		or     	jit_direct_jump_pat, jit_branch_alt
+		or	jit_direct_jump_pat+1, jit_cond_mask
+		mov	jit_instrptr, #jit_direct_jump_pat
+    		callpb 	#2, #jit_emit
+		jmp	jit_orig_cachepc+0
+		
 jit_finish_line
 #ifdef DEBUG_ENGINE_ALL
 		mov	uart_char, #"|"
 		call	#ser_tx
 #endif
-		' check for unconditional branch;
-		' if it is unconditional, go do it
-		cmp	jit_condition, jit_cond_mask wz
-    if_z	jmp	jit_orig_cachepc+0
-    		' for conditional:
-		' forward branches we assume not taken, so continue
-		' with the trace
-''		cmp	jit_branch_dest, ptrb wcz
-''	if_a	ret
-	
 jit_emit_jump_to_ptrb
-		'' emit another direct branch
-		mov	jit_instrptr, ptrb
-		mov	jit_condition, #$f	' unconditional branch
-		jmp	#jit_emit_direct_branch
+		mov	jit_branch_dest, ptrb
+		mov	jit_condition, jit_cond_mask	' unconditional branch
+		jmp	#jit_direct_emit
 
 jit_cond_mask	long	$f0000000
 

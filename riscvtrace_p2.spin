@@ -999,7 +999,7 @@ issue_branch_cond
 		sub	immval, #4
 
 		' and go create the branch
-		mov	jit_instrptr, immval
+		mov	jit_branch_dest, immval
 		jmp	#jit_emit_direct_branch
 
 hub_illegalinstr

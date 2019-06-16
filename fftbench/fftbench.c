@@ -44,6 +44,10 @@
 #if defined(__propeller__) || defined(CATALINA)
 #include <propeller.h>
 #define getcyclespersec() (80000000)
+#elif defined(__riscv)
+#include "../lib/riscv.h"
+extern unsigned int getcyclespersec();
+#define printf iprintf
 #else
 extern unsigned int getcyclespersec();
 extern unsigned int getcnt();
@@ -116,6 +120,9 @@ void print_omp_version() {
 
 void fft_bench() {
     unsigned long startTime, endTime;
+#ifdef __riscv    
+    unsigned long startMillis, endMillis;
+#endif    
     int tid;
     int s, slen;
     int firstLevel;
@@ -136,6 +143,9 @@ void fft_bench() {
 
     // Radix-2 Decimation In Time, the bit-reversal step.
     decimate();
+#ifdef __riscv
+    startMillis = getmillis();
+#endif    
     // Start benchmark timer
     startTime = time_us();
 
@@ -170,11 +180,18 @@ void fft_bench() {
 
     // Stop benchmark timer
     endTime = time_us();
+#ifdef __riscv
+    //waitcnt(getcnt() + 160000000); // debug code
+    endMillis = getmillis();
+#endif
 
     // Print resulting spectrum
     printSpectrum();
 
     printf ("1024 point bit-reversal and butterfly run time = %d us\n", endTime - startTime);
+#ifdef __riscv
+    printf("... millis counter=%u (will be half of above if clock is really 160 MHz)\n", endMillis - startMillis);
+#endif    
 }
 
 // Integer square root

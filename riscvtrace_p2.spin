@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-'#define USE_LUT_CACHE
+#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -187,7 +187,7 @@ nosar
 		' we can tell it's an add because it will have WZ_BITNUM set
 		testb	opdata, #WZ_BITNUM wc
 	if_c	jmp	#hub_handle_addi
-reg_imm
+
 		' special case:
 		' xori rA, rB, #-1
 		' -> not rA, rB
@@ -947,18 +947,20 @@ handle_mul
 		' similarly addi R, N, 0
 		' can become mov R, N
 hub_handle_addi
-		cmp	immval, #0 wcz
+		cmps	immval, #0 wcz
 	if_z	jmp	#emit_mov_rd_rs1
+	if_b	jmp	#handle_subi
 		cmp	rs1, #x0 wz
 	if_z	mov	dest, rd
 	if_z	jmp	#emit_mvi
+		jmp	#continue_imm
+		
 		' convert addi A, B, -N to sub A, B, N
-		cmp	immval, #0 wcz
-	if_ae	jmp	#reg_imm
+handle_subi
 		neg	immval
 		mov	opdata, subdata
 		bith	opdata, #IMM_BITNUM
-		jmp	#reg_imm
+		jmp	#continue_imm
 
 hub_condbranch		
 		test	func3, #%100 wz

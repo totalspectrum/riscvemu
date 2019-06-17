@@ -66,7 +66,7 @@ jit_set_pc
 		mov	pb, #0		' source for dest is unknown
 	
 jit_trampoline_set_pc
-#ifdef DEBUG_ENGINE
+#ifdef USE_DISASM
 		call	#hub_print_newpc
 #endif
 		'' check for a cache hit by looking in the LUT
@@ -142,7 +142,7 @@ goto_cache
 
 		'' OK, we have to compile a new trace
 cache_miss
-#ifdef DEBUG_ENGINE
+#ifdef USE_DISASM
 		call	#hub_print_cachemiss
 #endif
 		' OK, we got a cache miss here

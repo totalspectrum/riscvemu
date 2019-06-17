@@ -1,5 +1,5 @@
-'#define DEBUG_ENGINE
-'#define USE_DISASM
+#define DEBUG_ENGINE
+#define USE_DISASM
 '#define USE_LUT_CACHE
 
 {{
@@ -614,7 +614,7 @@ start_of_tables
 ''                          2 -> operation is xor
 
 mathtab
-		add	1,regfunc    wz	' wz indicates we want add/sub
+adddata		add	1,regfunc    wz	' wz indicates we want add/sub
 		shl	0,regfunc    wc ' wc indicates to regfunct that it's a shift
 		cmps	0,sltfunc    wcz
 		cmp	0,sltfunc    wcz
@@ -629,12 +629,12 @@ loadtab
 		and	0, illegalinstr
 		rdbyte	0, loadop
 		rdword	0, loadop
-		rdlong	0, loadop
+ldlongdata	rdlong	0, loadop
 		and	0, illegalinstr
 storetab
 		wrbyte	0, storeop
 		wrword	0, storeop
-		wrlong	0, storeop
+swlongdata	wrlong	0, storeop
 		and	0, illegalinstr
 		and	0, illegalinstr
 		and	0, illegalinstr
@@ -699,7 +699,7 @@ compile_bytecode
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
-  if_z_or_c	jmp	#hub_compressed_instr		' low bits must both be 3
+  if_z_or_c	jmp	#hub_compressed_instr		' low bits must both be 3; otherwise a 16 bit instruction
   
     		'' decode instruction
 		mov	immval, opcode
@@ -1017,14 +1017,20 @@ issue_branch_cond
 		mov	jit_branch_dest, immval
 		jmp	#jit_emit_direct_branch
 
-hub_compressed_instr
+c_illegalinstr
+		mov	immval, ptrb
+		add	immval, #2
+		jmp	#do_illegal
+		
 hub_illegalinstr
 		mov	immval, ptrb
+do_illegal
 		call	#emit_pc_immval_minus_4
 		mov	jit_instrptr, #imp_illegal
-		mov	pb, #1
-		jmp	#jit_emit
-
+		call	#emit1
+		mov	jit_condition, #0
+		jmp	#jit_emit_direct_branch
+		
 hub_compile_auipc
 		mov	immval, opcode
 		and	immval, LUI_MASK
@@ -1351,17 +1357,6 @@ hub_rdpininstr
 		jmp	#emit_opdata_and_ret
 		
 hub_coginitinstr
-#ifdef FIXME
-		mov	uart_num, immval
-		call	#ser_hex
-		mov	uart_num, rs2
-		call	#ser_hex
-		mov	uart_num, rs1
-		call	#ser_hex
-		mov	uart_num, rd
-		call	#ser_hex
-		call	#ser_nl
-#endif
 		shr	immval, #5	' skip over rs2
 		mov	func2, immval
 		and	func2, #3 wz
@@ -1385,6 +1380,214 @@ hub_coginitinstr
 
 hub_singledestinstr
 		jmp	#illegalinstr
+
+hub_compressed_instr
+		sub	ptrb, #2	' adjust for compressed instruction
+		andn	opcode, SIGNWORD
+#ifdef DEBUG_ENGINE
+		call	#ser_nl
+		mov	uart_char, #"<"
+		call	#ser_tx
+		mov	uart_num, opcode
+		call	#ser_hex
+#endif
+		mov	temp, opcode
+		mov	dest, opcode
+		shr	dest, #13
+		and	dest, #7
+		and	temp, #3
+		shl	temp, #3
+		or	dest, temp	' dest now contains opcode | func3
+#ifdef DEBUG_ENGINE
+		mov	uart_num, dest
+		call	#ser_hex
+#endif
+		shl	dest, #2
+		add	dest, ##@rvc_jmptab
+		jmp	dest
+
+rvc_jmptab
+		jmp	#c_illegalinstr	' 00 000
+		jmp	#c_illegalinstr	' 00 001
+		jmp	#c_illegalinstr	' 00 010
+		jmp	#c_illegalinstr	' 00 011
+		jmp	#c_illegalinstr	' 00 100
+		jmp	#c_illegalinstr	' 00 101
+		jmp	#c_illegalinstr	' 00 110
+		jmp	#c_illegalinstr	' 00 111
+
+		jmp	#c_addi		' 01 000
+		jmp	#c_jal		' 01 001
+		jmp	#c_li		' 01 010
+		jmp	#c_lui		' 01 011
+		jmp	#c_illegalinstr	' 01 100
+		jmp	#c_j		' 01 101
+		jmp	#c_illegalinstr	' 01 110
+		jmp	#c_illegalinstr	' 01 111
+
+		jmp	#c_illegalinstr	' 10 000
+		jmp	#c_illegalinstr	' 10 001
+		jmp	#c_lwsp		' 10 010
+		jmp	#c_illegalinstr	' 10 011
+		jmp	#c_mv		' 10 100
+		jmp	#c_illegalinstr	' 10 101
+		jmp	#c_swsp		' 10 110
+		jmp	#c_illegalinstr	' 10 111
+
+c_addi
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f wz
+	if_z	jmp	#emit_nop
+		mov	immval, opcode
+		testb	immval, #12 wc
+		muxc	immval, #$80
+		shl	immval, #24
+		sar	immval, #26
+		abs	immval wc
+	if_nc	mov	opdata, adddata
+	if_c	mov	opdata, subdata
+		bith	opdata, #IMM_BITNUM
+		setd	opdata, rd
+		sets	opdata, immval
+		mov	jit_instrptr, #opdata
+		jmp	#emit1
+
+c_li
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f wz
+	if_z	jmp	#emit_nop
+		mov	immval, opcode
+		shr	immval, #2
+		and	immval, #$1f
+		testb	opcode, #12 wc
+		bitc	immval, #5
+		signx	immval, #5
+		abs	immval wc
+	if_nc	mov	opdata, mov_pat
+	if_c	mov	opdata, negdata
+		bith	opdata, #IMM_BITNUM
+		setd	opdata, rd
+		sets	opdata, immval
+		mov	jit_instrptr, #opdata
+		jmp	#emit1
+		
+c_mv
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f wz
+	if_z	jmp	#c_illegalinstr		' actually should be C_EBREAK
+		mov	rs2, opcode
+		shr	rs2, #2
+		and	rs2, #$1f wz
+	if_z	jmp	#c_jr
+		' c_mv or c_add
+		testb	opcode, #12 wc
+	if_c	mov	opdata, adddata
+	if_nc	mov	opdata, mov_pat
+		sets	opdata, rs2
+		setd	opdata, rd
+		mov	jit_instrptr, #opdata
+		jmp	#emit1
+
+		' jump and/or jalr to rd
+c_jr
+		' if jalr, then
+		' emit code to save ptrb in x1
+		testb	opcode, #12 wc
+	if_c	mov    immval, ptrb
+	if_c	mov    dest, #x1
+	if_c	call   #emit_mvi
+
+		' generate code to copy final destination into ptrb
+		sets	imp_jalr_nooff, rd
+		mov	jit_instrptr, #imp_jalr_nooff
+		call	#emit1
+
+		' now generate the branch
+		mov	jit_condition, #$f
+		jmp	#jit_emit_indirect_branch
+		
+
+c_jal
+		' emit code to save ptrb in x1
+		mov    immval, ptrb
+		mov    dest, #x1
+		call   #emit_mvi
+		'' fall through
+c_j
+		mov	immval, opcode
+		shr	immval, #2
+		andn	immval, #1
+		testb	opcode, #2 wc
+		bitc	immval, #5
+		testb	opcode, #6 wc
+		bitc	immval, #7
+		testb	opcode, #7 wc
+		bitc	immval, #6
+		testb	opcode, #8 wc
+		bitc	immval, #10
+		testb	opcode, #9 wc
+		bitc	immval, #8
+		testb	opcode, #10 wc
+		bitc	immval, #9
+		testb	opcode, #11 wc
+		bitc	immval, #4
+		testb	opcode, #12 wc
+		bitc	immval, #11
+		signx	immval, #11
+		sub	immval, #2
+		add	immval, ptrb
+		mov	jit_branch_dest, immval
+		mov	jit_condition, #$f
+		jmp	#jit_emit_direct_branch
+c_lui
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f
+		cmp	rd, #2 wz
+	if_z	jmp	#c_addi16sp
+	
+		mov	immval, opcode
+		shr	immval, #2
+		and	immval, #$1f
+		shl	immval, #12
+		testb	opcode, #12 wc
+		bitc	immval, #17	' copy sign bit to bit 17
+		signx	immval, #17
+		mov	dest, rd
+		jmp	#emit_mvi
+		
+c_addi16sp
+		jmp	#c_illegalinstr
+
+c_swsp
+		mov	rd, opcode
+		shr	rd, #2
+		and	rd, #$1f
+		mov	opdata, swlongdata
+		mov	immval, opcode
+		jmp	#c_lwswcommon
+c_lwsp
+		mov	rd, opcode
+		shr	rd, #7
+		and	rd, #$1f
+		mov	immval, opcode
+		shl	immval, #5
+		testb	opdata, #12 wc
+		muxc	immval, #12
+		mov	opdata, ldlongdata
+
+c_lwswcommon
+		mov	rs1, #x2
+		shr	immval, #7
+		and	immval, #$3f
+		mov	temp, immval
+		andn	immval, #3
+		and	temp, #3
+		shl	temp, #4
+		or	immval, temp
+		jmp	#hub_ldst_common
 		
 		orgh	$4000
-		

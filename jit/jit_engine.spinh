@@ -142,6 +142,9 @@ goto_cache
 
 		'' OK, we have to compile a new trace
 cache_miss
+#ifdef DEBUG_ENGINE
+		call	#hub_print_cachemiss
+#endif
 		' OK, we got a cache miss here
 		' so we have to compile a new trace
 

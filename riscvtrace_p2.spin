@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-#define USE_LUT_CACHE
+'#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -18,6 +18,8 @@
       7Fx - COG registers 1F0-1FF
       BC0 - UART register
       BC1 - wait register  (writing here causes us to wait until a particular cycle)
+      BC2 - debug register (writing here dumps debug info to serial)
+      BC3 - millisecond timer (32 bits caculated from the cycle counter)
       C00 - cycle counter
       C80 - cycle counter high
       
@@ -432,7 +434,8 @@ skip_write
 		andn	immval, #1  	' clear low bit
 		muxc	immval, ##(1<<11)
 		add	immval, ptrb	' calculate branch target
-		mov	jit_condition, #$F	    ' unconditional jump 		
+		mov	jit_condition, #$F	    ' unconditional jump
+		sub	immval, #4     	' adjust for PC offset
 		jmp	#issue_branch_cond
 
 jalr
@@ -696,7 +699,7 @@ compile_bytecode
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
-  if_z_or_c	jmp	#illegalinstr		' low bits must both be 3
+  if_z_or_c	jmp	#hub_compressed_instr		' low bits must both be 3
   
     		'' decode instruction
 		mov	immval, opcode
@@ -998,6 +1001,9 @@ hub_condbranch
 		bitc	immval, #11
 		andn	immval, #1
 		add	immval, ptrb
+		'' BEWARE! ptrb has stepped up by 4 or 2, so we need to
+		'' adjust accordingly
+		sub	immval, #4
 
 		''
 		'' issue a conditional branch to the value in
@@ -1005,15 +1011,13 @@ hub_condbranch
 		'' jit_condition has the P2 flags to use for the condition
 		'' ($F for unconditional branch)
 		''
-issue_branch_cond		
-		'' BEWARE! ptrb has stepped up by 4, so we need to
-		'' adjust accordingly
-		sub	immval, #4
+issue_branch_cond
 
 		' and go create the branch
 		mov	jit_branch_dest, immval
 		jmp	#jit_emit_direct_branch
 
+hub_compressed_instr
 hub_illegalinstr
 		mov	immval, ptrb
 		call	#emit_pc_immval_minus_4

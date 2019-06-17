@@ -179,4 +179,7 @@ hub_print_newpc
 		call	#ser_tx
 		mov	uart_num, ptrb
 		jmp	#ser_hex
+hub_print_cachemiss
+		mov	uart_char, #"$"
+		call	#ser_tx
 #endif

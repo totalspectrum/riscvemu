@@ -74,7 +74,7 @@ jit_trampoline_set_pc
 		'' significant. If you know that ptrb is aligned differently,
 		'' you should shift and mask
 		mov    jit_instr, ptrb
-		shr    jit_instr, #2
+		shr    jit_instr, #2			' divide by cache tag size
 		and    jit_instr, #CACHE_TAG_SIZE-1
 		rdlut	jit_temp, jit_instr		' fetch cache data
 		mov	jit_orig_cachepc, jit_temp	' save a copy
@@ -334,10 +334,10 @@ jit_loc_mask	long	$000fffff	' 20 bits
 jit_base_of_cache_mem
 		long	$200 + CACHE_TAG_SIZE
 jit_top_of_cache_mem
-		long	$400 - 8
+		long	$400 - 4
 #else
 jit_base_of_cache_mem
 		long	TOP_OF_MEM
 jit_top_of_cache_mem
-		long	$80000 - 8
+		long	$7c000 - 16
 #endif

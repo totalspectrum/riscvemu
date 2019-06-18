@@ -1382,6 +1382,8 @@ hub_singledestinstr
 		jmp	#illegalinstr
 
 hub_compressed_instr
+		neg	ptra_reg, #1	' we don't have a single "disassemble" to check for ptra_reg being modified, so invalidate it just in case
+		
 		sub	ptrb, #2	' adjust for compressed instruction
 		andn	opcode, SIGNWORD wz
 	if_z	jmp	#c_illegalinstr
@@ -1435,14 +1437,12 @@ rvc_jmptab
 		jmp	#c_swsp		' 10 110
 		jmp	#c_illegalinstr	' 10 111
 
-#define RPRIME_OFFSET x8
-
 c_addi4spn
 		mov	rd, opcode
 		shr	rd, #2
 		and	rd, #7
-		add	rd, #RPRIME_OFFSET
-		mov	rs1, x2
+		add	rd, #x0
+		mov	rs1, #x2
 		mov	immval, #0
 		testb	opcode, #5 wc
 		bitc	immval, #3
@@ -1461,6 +1461,7 @@ c_addi4spn
 		testb	opcode, #12 wc
 		bitc	immval, #5
 		mov	opdata, adddata
+		bith	opdata, #IMM_BITNUM
 		jmp	#continue_imm
 
 c_addi
@@ -1589,7 +1590,26 @@ c_lui
 		jmp	#emit_mvi
 		
 c_addi16sp
-		jmp	#c_illegalinstr
+		mov	rd, opcode
+		shr	rd, #2
+		and	rd, #7
+		add	rd, #x8
+		mov	immval, opcode
+		shr	immval, #7
+		and	immval, #$f
+		shl	immval, #6
+		testb	opcode, #5 wc
+		bitc	immval, #3
+		testb	opcode, #6 wc
+		bitc	immval, #2
+		testb	opcode, #11
+		bitc	immval, #4
+		testb	opcode, #12
+		bitc	immval, #5
+		mov	rs1, #x2
+		mov	opdata, adddata
+		bith	opdata, #IMM_BITNUM		
+		jmp	#continue_imm
 
 c_swsp
 		mov	rd, opcode
@@ -1646,9 +1666,9 @@ c_lwswcommon
 		shr	immval, #10
 		and	immval, #7
 		shl	immval, #3
-		testb	opcode, #6 wc
+		testb	opcode, #5 wc
 		bitc	immval, #6
-		testb	opcode, #7 wc
+		testb	opcode, #6 wc
 		bitc	immval, #2
 		mov	func3, #2
 		jmp	#hub_ldst_common

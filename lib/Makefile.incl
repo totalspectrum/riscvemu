@@ -12,7 +12,7 @@
 TOOLS=/opt/riscv/bin/riscv32-unknown-elf-
 SPIN2CPP=/home/ersmith/Parallax/spin2cpp/build/spin2cpp
 
-ARCH ?= -march=rv32im
+ARCH ?= rv32im
 OPT ?= -Os
 LDNAME ?= flat.ld
 
@@ -25,7 +25,7 @@ LIB=../lib/
 LD=$(TOOLS)ld
 
 CC=$(TOOLS)gcc
-CFLAGS=$(OPT) $(ARCH) $(CDEFS)
+CFLAGS=$(OPT) -march=$(ARCH) $(CDEFS)
 
 START=$(LIB)start.o
 

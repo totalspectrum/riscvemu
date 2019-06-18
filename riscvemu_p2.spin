@@ -957,6 +957,25 @@ not_waitct
 		call	#mem_checksum
 		jmp	#nexti
 not_debug
+		cmp	opcode, ##$BC3 wz
+	if_nz	jmp	#not_millis
+		' calculate elapsed milliseconds into dest
+		rdlong	info2, #$14	' fetch clock frequency
+		qdiv	info2, ##1000	' convert to milliseconds
+		getqx	info2
+getmillis		
+		mov	info3, cycleh
+		getct	info4
+		cmp	info3, cycleh wz
+	if_nz	jmp	#getmillis
+		' now we have a 64 bit number (dest, cycleh)
+		' want to divide this by 160_000 to get milliseconds
+		setq	info3
+		qdiv	info4, info2
+		getqx	dest
+		jmp	#write_and_nexti
+	
+not_millis
 		' check for COG register
 		getnib	funct2, opcode, #2
 		mov	temp, opcode

@@ -3,19 +3,19 @@
 //
 
 // these are the CSR numbers for the P2 hardware registers
-#define DIRA 0x7fa
-#define DIRB 0x7fb
-#define OUTA 0x7fc
-#define OUTB 0x7fd
-#define INA  0x7fe
-#define INB  0x7ff
+#define DIRA_CSR 0x7fa
+#define DIRB_CSR 0x7fb
+#define OUTA_CSR 0x7fc
+#define OUTB_CSR 0x7fd
+#define INA_CSR  0x7fe
+#define INB_CSR  0x7ff
 
-#define UART 0xBC0
-#define WAITCYC 0xBC1
-#define DBGPRNT 0xBC2
+#define UART_CSR 0xBC0
+#define WAITCYC_CSR 0xBC1
+#define DBGPRNT_CSR 0xBC2
 #define MILLIS_CSR 0xBC3
-#define CNT  0xC00
-#define CNTH 0xC80
+#define CNT_CSR  0xC00
+#define CNTH_CSR 0xC80
 
 #define X__(x) #x
 #define X_(x) X__(x)
@@ -63,11 +63,11 @@
 			      : : "rK" (__v));			\
 })
 
-#define getcnt() csr_read(CNT)
-#define getcnth() csr_read(CNTH)
-#define waitcnt(tim) csr_write(WAITCYC, tim)
+#define getcnt() csr_read(CNT_CSR)
+#define getcnth() csr_read(CNTH_CSR)
+#define waitcnt(tim) csr_write(WAITCYC_CSR, tim)
 #define getmillis() csr_read(MILLIS_CSR)
-#define trigger_debug() csr_read(DBGPRNT)
+#define trigger_debug() csr_read(DBGPRNT_CSR)
 
 // NOTE:
 // CUSTOM0 opcode is 0x0b (2<<2)+3

@@ -696,6 +696,9 @@ compile_bytecode_start_line
 
 		'' compile one opcode
 compile_bytecode
+		' if last instruction modified ptra_reg, then invalidate it
+		cmp	rd, ptra_reg wz
+	if_z	neg	ptra_reg, #1
 		' fetch the actual RISC-V opcode
 		rdlong	opcode, ptrb++
 		test	opcode, #3 wcz
@@ -715,9 +718,6 @@ compile_bytecode
 		mov	rd, opcode
 		shr	rd, #7
 		and	rd, #$1f
-		'' check for modifying ptra_reg
-		cmp	rd, ptra_reg wz
-	if_z	neg	ptra_reg, #1
 	
 		'' now look up in table
 		mov	temp, opcode
@@ -1382,8 +1382,6 @@ hub_singledestinstr
 		jmp	#illegalinstr
 
 hub_compressed_instr
-		neg	ptra_reg, #1	' we don't have a single "disassemble" to check for ptra_reg being modified, so invalidate it just in case
-		
 		sub	ptrb, #2	' adjust for compressed instruction
 		andn	opcode, SIGNWORD wz
 	if_z	jmp	#c_illegalinstr

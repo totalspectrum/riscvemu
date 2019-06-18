@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-#define USE_LUT_CACHE
+'#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -1588,22 +1588,20 @@ c_lui
 		jmp	#emit_mvi
 		
 c_addi16sp
-		mov	rd, opcode
-		shr	rd, #2
-		and	rd, #7
-		add	rd, #x8
-		mov	immval, opcode
-		shr	immval, #7
-		and	immval, #$f
-		shl	immval, #6
-		testb	opcode, #5 wc
-		bitc	immval, #3
-		testb	opcode, #6 wc
-		bitc	immval, #2
-		testb	opcode, #11
-		bitc	immval, #4
-		testb	opcode, #12
+		mov	immval, #0
+		testb	opcode, #2 wc
 		bitc	immval, #5
+		testb	opcode, #3 wc
+		bitc	immval, #7
+		testb	opcode, #4 wc
+		bitc	immval, #8
+		testb	opcode, #5 wc
+		bitc	immval, #6
+		testb	opcode, #6 wc
+		bitc	immval, #4
+		testb	opcode, #12 wc
+		bitc	immval, #9
+		signx	immval, #9
 		mov	rs1, #x2
 		mov	opdata, adddata
 		bith	opdata, #IMM_BITNUM		
@@ -1740,10 +1738,7 @@ c_bnez
 		shr	rs1, #7
 		and	rs1, #7
 		add	rs1, #x8
-		mov	immval, opcode
-		andn	immval, #1	' clear low bit
-		signx	immval, #12
-		sar	immval, #4
+		mov	immval, #0
 		testb	opcode, #2 wc
 		bitc	immval, #5
 		testb	opcode, #3 wc
@@ -1756,7 +1751,12 @@ c_bnez
 		bitc	immval, #7
 		testb	opcode, #10 wc
 		bitc	immval, #3
-
+		testb	opcode, #11 wc
+		bitc	immval, #4
+		testb	opcode, #12 wc
+		bitc	immval, #8
+		signx	immval, #8
+		
 		' emit compare
 		setd	opdata, rs1
 		sets	opdata, #x0

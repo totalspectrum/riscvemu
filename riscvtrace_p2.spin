@@ -1573,7 +1573,8 @@ c_j
 c_lui
 		mov	rd, opcode
 		shr	rd, #7
-		and	rd, #$1f
+		and	rd, #$1f wz
+	if_z	jmp	#emit_nop
 		cmp	rd, #2 wz
 	if_z	jmp	#c_addi16sp
 	
@@ -1602,7 +1603,7 @@ c_addi16sp
 		testb	opcode, #12 wc
 		bitc	immval, #9
 		signx	immval, #9
-		mov	rd, #x2
+'		mov	rd, #x2		' rd was already set to x2
 		mov	rs1, #x2
 		mov	opdata, adddata
 		bith	opdata, #IMM_BITNUM		
@@ -1614,13 +1615,14 @@ c_swsp
 		and	rd, #$1f
 		mov	opdata, swlongdata
 		mov	immval, opcode
-		shr	immval, #7
-		and	immval, #$3f
-		mov	temp, immval
-		andn	immval, #3
-		and	temp, #3
-		shl	temp, #4
-		or	immval, temp
+		' bits 7-12 of immval contain imm[5:2|7:6]
+		shr	immval, #9
+		and	immval, #$f
+		shl	immval, #2
+		testb	opcode, #7 wc
+		bitc	immval, #6
+		testb	opcode, #8 wc
+		bitc	immval, #7
 		mov	rs1, #x2
 		mov	func3, #2
 		jmp	#hub_ldst_common

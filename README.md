@@ -16,8 +16,9 @@ implemented on P1 is the low 32 bits of the cycle counter (so rdcycle
 works, but rdcycleh does not). On P2 the full 64 bit cycle counter is
 available.
 
-Some non-standard CSRs are used to access a UART emulation and to directly access
-propeller registers. See below for details.
+The trace cache version (source `riscvtrace_p2.spin`, binaries `p2trace.binary`) supports compressed instructions, i.e. the RV32IMC instruction set.
+
+Some non-standard CSRs are used to access a UART emulation and to directly access propeller registers. See below for details.
 
 ### Directories and Files
 
@@ -49,9 +50,23 @@ The RISC-V binary should be linked to start at address 8192 (0x2000).
 See the Makefiles for examples of how to do this.
 
 To build, I suggest using the Makefiles in the various subdirectories.
-These produce three binaries, p1.binary, p2.binary, and p2emu.binary.
-p1.binary is the P1 emulator. p2.binary is the P2 JIT version, and
+These produce p1.binary, p2.binary, and p2emu.binary.
+p1.binary is the P1 emulator. p2.binary is the plain P2 JIT version,
+p2trace.binary is the trace cache P2 JIT version and
 p2emu.binary is the P2 emulator version.
+
+For example, to run the trace cache version of the xxtea benchmark, go into the xxtea directory and do:
+```
+make
+loadp2 -l230400 -b230400 p2trace.binary  -t
+```
+Some flags you can pass to `make` for compiling:
+```
+# set optimization level, e.g. -O3 for maximum performance on Dhrystone
+OPT=-O3
+# set architecture; rv32im is default, rv32imc is compressed (p2trace only)
+ARCH=rv32imc
+```
 
 ## P2 Support
 

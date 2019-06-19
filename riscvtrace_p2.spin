@@ -1602,6 +1602,7 @@ c_addi16sp
 		testb	opcode, #12 wc
 		bitc	immval, #9
 		signx	immval, #9
+		mov	rd, #x2
 		mov	rs1, #x2
 		mov	opdata, adddata
 		bith	opdata, #IMM_BITNUM		

@@ -1439,7 +1439,7 @@ c_addi4spn
 		mov	rd, opcode
 		shr	rd, #2
 		and	rd, #7
-		add	rd, #x0
+		add	rd, #x8
 		mov	rs1, #x2
 		mov	immval, #0
 		testb	opcode, #5 wc

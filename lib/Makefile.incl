@@ -20,7 +20,7 @@ LDNAME ?= flat.ld
 HDRSIZE=16384
 
 AS=$(TOOLS)as
-ASFLAGS=$(ARCH)
+ASFLAGS=-march=$(ARCH)
 LIB=../lib/
 LD=$(TOOLS)ld
 

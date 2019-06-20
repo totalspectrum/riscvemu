@@ -196,7 +196,8 @@ These look like:
    That is, the output register is "res", input register is "dval", and
    "imm" selects the actual opcode to use. Note that in P2 the output and
    input will always be the same for these instructions (the instruction
-   field uses D for both) unless you use ALTR.
+   field uses D for both) unless you use ALTR, so for best performance
+   use the same register.
    
    for example to get current COG id into a0
      .insn i CUSTOM_1, 1, a0, 0x001(a0)

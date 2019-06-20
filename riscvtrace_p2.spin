@@ -53,7 +53,7 @@ DAT
 		'' initial COG boot code
 		cogid	   pa
 		setq	   #0
-		coginit	   pa, #$20
+		coginit	   pa, #@enter
 		' config area
 		orgh $10
 		long	   0
@@ -61,7 +61,8 @@ DAT
 		long	   0		' clock mode
 		long	   230_400	' baud
 
-		orgh $20
+		long	   0[8]		' reserved
+
 		org 0
 enter
 x0		nop
@@ -78,12 +79,12 @@ x7		mov	x1, #$1ff	' will count down
 x8		neg	x3,#1
 x9		nop
 x10		wrlut	x3,x1
-x11		djnz	x1,#x10
+x11		djnf	x1,#x10
 
 x12		nop
 x13		call	#ser_init
 x14		call	#jit_init
-x15		jmp	#startup
+x15		jmp	#init_vectors
 
 x16		long	0[16]
 
@@ -555,25 +556,16 @@ coginit_pattern
 		coginit temp,0-0 wc	' rs2
 		negc	0-0,temp 	' rd
 		
-calldebug
-		call	#\debug_print
-callmillis
-		call	#\getmillis	' get milliseconds into dest
-		mov	0-0, dest
 getct_pat
 		getct	0-0
 getcth_pat
 		mov	0-0, cycleh
-waitcnt_instr
-		addct1 0-0, #0
-		waitct1
-uart_send_instr
-		mov	uart_char, 0-0
-		call	#\ser_tx
-		or	x0, x0
-uart_recv_instr
+csrvec_read_instr
 		call	#\ser_rx
-		mov	0-0, uart_char
+		mov	0-0, pb
+csrvec_write_instr
+		mov	pb, 0-0
+		call	#\ser_tx
 		
 '=========================================================================
 ' custom instructions
@@ -759,12 +751,67 @@ dis_instr	long	0
 ''
 '' some lesser used routines that can go in HUB memory
 ''
-		orgh
-		'' now start execution
-startup
-		mov	uart_str, ##@boot_msg
-		call	#ser_str
+		orgh	$800
 		
+		'' RISC-V register info: BC0-BCF
+		'' each entry is 2 longs: a vector for CSR reads
+		'' and one for writes
+		'' the reads return a value in pb
+		'' the writes take a value in pb
+		'' $0667EE01 is the instruction:
+		''    _ret_ neg pb, #1
+		'' which is the default
+#define DEFAULT_CSR_INSTRUCTION $0667EE01
+
+csr_vectors
+		long   DEFAULT_CSR_INSTRUCTION[32]
+init_vectors
+		'' this is a hook for expanding the interpreter
+		nop
+		jmp	#setup
+
+		'''''''''''''''''''''''''''''''''''''''''
+		'' actual CSR utility routines
+		'' these all recveive/return in pb
+		'''''''''''''''''''''''''''''''''''''''''
+uart_read_csr
+		call	#\ser_rx
+	_ret_	mov	pb, uart_char
+uart_write_csr
+		mov	uart_char, pb
+		jmp	#ser_tx
+waitcnt_read_csr
+	_ret_	getct	pb
+
+waitcnt_write_csr
+		addct1	pb, #0
+		waitct1
+		ret
+debug_read_csr
+	_ret_	mov	pb, #0
+debug_write_csr
+		jmp	#\debug_print
+		
+millis_read_csr
+		' calculate elapsed milliseconds into pb
+		mov	dest, cycleh
+		getct	temp
+		cmp	dest, cycleh wz
+	if_nz	jmp	#millis_read_csr
+		' now we have a 64 bit number (dest, cycleh)
+		' want to divide this by 160_000 to get milliseconds
+		setq	dest
+		qdiv	temp, ##(_CYCLES_PER_SEC/1000)
+		getqx	pb
+		ret
+
+millis_write_csr
+	_ret_	mov	pb, #0
+	
+
+		'''''''''''''''''''''''''''''''''''''''''
+		'' now start execution
+setup
 		'' set up interrupt for CT3 == 0
 		'' to measure cycle rollover
 		getct	lastcnt
@@ -773,9 +820,51 @@ startup
 		mov   IJMP3, #ct3_isr
 		setint3	#3   '' ct3
 
+		''
+		'' set up CSR vectors
+		'' FIXME: we should skip individual vectors if they
+		'' are unchanged
+		''
+
+		loc	ptra, #\@csr_vectors
+		loc	pa, #\@uart_read_csr
+		call	#install_vector
+		loc	pa, #\@uart_write_csr
+		call	#install_vector
+
+		loc	pa, #\@waitcnt_read_csr
+		call	#install_vector
+		loc	pa, #\@waitcnt_write_csr
+		call	#install_vector
+		
+		loc	pa, #\@debug_read_csr
+		call	#install_vector
+		loc	pa, #\@debug_write_csr
+		call	#install_vector
+
+		loc	pa, #\@millis_read_csr
+		call	#install_vector
+		loc	pa, #\@millis_write_csr
+		call	#install_vector
+		
+		'' print boot message
+		mov	uart_str, ##@boot_msg
+		call	#ser_str
+		
 		'' run the JIT loop forever
 		jmp	#jit_set_pc
 
+		' write a "jump" instruction to the address in pa
+		' into ptra; skip if *ptra is already initialized
+install_vector
+		rdlong	temp, ptra
+		cmp	temp, ##DEFAULT_CSR_INSTRUCTION wz
+	if_nz	add	ptra, #4
+	if_nz	ret
+		or	pa, ##$FD800000	' turn into absolute JMP
+		wrlong	pa, ptra++
+		ret
+		
 #include "jit/util_serial.spin2"
 
 #ifdef USE_DISASM
@@ -1115,55 +1204,60 @@ not_mcount
 		jmp	#emit_opdata_and_ret
 		
 		'' here's where we do our non-standard registers
+		''
+		'' BC0 - BCF are vectored through
+		'' a table at the start of memory
+		''
+		''
+		
 		'' BC0 == UART
 not_standard
 		cmp	func3, #$B wz	' is it one of ours?
 	if_nz	jmp	#illegalinstr
 	
-		cmp	immval, #$1C0 wz
-	if_nz	jmp	#not_uart
+		cmp	immval, #$1C0 wcz
+	if_b	jmp	#not_vector
+		cmp	immval, #$1CF wcz
+	if_a	jmp	#not_vector
 
-		'' we can only actually read *or* write
-		'' if rd is x0, then we are writing
+		'' here's the vector read/write code
+		'' if there is a read (rd not x0) then get
+		'' the value into pb first by calling the
+		'' input vector
+		'' for a write (rs1 not x0) then copy that to
+		'' pb (or'ing or and'ing if necessary) and
+		'' then calling the output vector
+		''   the full sequence will look like
+		''     call #\<csrvector_read>
+		''     mov  rd, pb
+		''     mov  pb, rs1 ' or and, or or
+		''     call #\<csrvector_write>
+		and	immval, #$f
+		shl	immval, #3	' point to read vector
+		add	immval, ##@csr_vectors
+		
+		'' if rd is x0, then skip the read
 		cmp	rd, #0 wz
-	if_z	jmp	#skip_uart_read
-		setd	uart_recv_instr+1, rd
-		mov	jit_instrptr, #uart_recv_instr
-		jmp	#emit2
+	if_z	jmp	#skip_csr_read
+		andn	csrvec_read_instr, LOC_MASK
+		or	csrvec_read_instr, immval
+		setd	csrvec_read_instr+1, rd
+		mov	jit_instrptr, #csrvec_read_instr
+		call	#emit2
 
-skip_uart_read
+skip_csr_read
 		'' if rs1 is x0, skip any writes
    		cmp	rs1, #0 wz
-	if_z	jmp	#emit_nop
-	
-		'' implement uart
-  		sets	uart_send_instr, rs1
-		mov	jit_instrptr, #uart_send_instr
-		mov	pb, #3
-		jmp	#jit_emit		' return from there to caller
+	if_z	ret
+		add	immval, #4	' move to write vector	
+		'' implement write
+		andn	csrvec_write_instr+1, LOC_MASK
+		or	csrvec_write_instr+1, immval
+  		sets	csrvec_write_instr, rs1
+		mov	jit_instrptr, #csrvec_write_instr
+		jmp	#emit2		' return from there to caller
 
-not_uart
-		cmp	immval, #$1C1 wz
-	if_nz	jmp	#not_wait
-		setd	waitcnt_instr, rs1
-		mov	jit_instrptr, #waitcnt_instr
-		jmp	#emit2		' return from there
-
-not_wait
-		cmp	immval, #$1C2 wz
-	if_nz	jmp	#not_debug
-		mov	jit_instrptr, #calldebug
-		jmp	#emit1
-not_debug
-		cmp	immval, #$1C3 wz	' get millisecond count
-	if_nz	jmp	#not_millis
-		cmp	rd, #0 wz
-	if_z	jmp	#emit_nop
-	
-		mov	jit_instrptr, #callmillis
-		setd	callmillis+1, rd
-		jmp	#emit2
-not_millis
+not_vector
 		jmp	#illegalinstr
 
 		' enter with ptrb holding pc
@@ -1175,18 +1269,6 @@ illegal_instr_error
 die
 		jmp	#die
 
-		' calculate elapsed milliseconds into dest
-getmillis
-		mov	dest, cycleh
-		getct	temp
-		cmp	dest, cycleh wz
-	if_nz	jmp	#getmillis
-		' now we have a 64 bit number (dest, cycleh)
-		' want to divide this by 160_000 to get milliseconds
-		setq	dest
-		qdiv	temp, ##(_CYCLES_PER_SEC/1000)
-		getqx	dest
-		ret
 		
 		' create a checksum of memory
 		' (uart_num, info2) are checksum

@@ -267,3 +267,18 @@ The JIT compiler is much simpler, and does not have the debug interface. It's
 a pure PASM program and hence only requires one COG (the riscvemu emulators use
 two COGs, one for the debug stub and one for the Risc-V emulation).
 
+## Hooking the emulation
+
+There are a number of hooks provided to allow easy modification of the
+emulated code (even without having to recompile the emulated application).
+
+(NOTE: At present these hooks only apply to the trace version of the
+emulator, they will be added later to others.)
+
+### CSR I/O
+
+Reading and writing the custom CSRs at BC0-BCF is accomplished by
+jumping through vectors located at $800. This is a table of 32
+jump instructions. The first one is for reading register BC0 (the UART); the second is for writing to BC0. The third and fourth are for reading and writing BC1 (the wait register), and so on. Thus, you can intercept all UART reads and writes by the emulated application by changing the first two jump table entries to jump to your own code.
+
+Note that this is P2 assembly code (*not* Risc-V code). The calling convention is that for reads the routine returns the value read in P2 register `pb`, and for writes the value to write is passed in `pb`. The normal (internal) call stack is used (so the routine should return with the P2 `ret` instruction.)

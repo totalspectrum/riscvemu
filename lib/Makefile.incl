@@ -24,7 +24,7 @@ ASFLAGS=-march=$(ARCH)
 LIB=../lib/
 LD=$(TOOLS)ld
 
-CC=$(TOOLS)gcc
+CC=$(TOOLS)gcc -I../lib
 CFLAGS=$(OPT) -march=$(ARCH) $(CDEFS)
 
 START=$(LIB)start.o

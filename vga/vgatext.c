@@ -343,7 +343,9 @@ int32_t vgatext_start(vgatext *self, int32_t pinbase)
   self->params[(i++)] = 33;
   // polarity (1 == negative)
   self->params[(i++)] = 3;
-
+  // size of character cells
+  self->params[i++] = 8;
+  
   trigger_debug();
   x = vga_tile_driver_start(&self->vga, (int32_t)(self->params));
   trigger_debug();

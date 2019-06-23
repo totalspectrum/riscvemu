@@ -180,10 +180,5 @@
         v;                                                  \
     })
 
-#define waitx(a)                                     \
-    ({                                                  \
-        unsigned long v;                                \
-        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x31" \
-                              : "=r"(v) : "r"(a)  );    \
-        v;                                                  \
-    })
+
+#define _clkfreq (*(unsigned int *)0x14)

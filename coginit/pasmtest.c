@@ -13,11 +13,7 @@
 //   mbox[1] = aval; we also write back the final result (aval+bval) here
 //   mbox[2] = bval
 //
-#ifdef __riscv
-#include "../lib/riscv.h"
-#else
 #include <propeller.h>
-#endif
 #include "pasmtest.h"
 
 #define INLINE__ static inline

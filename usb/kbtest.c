@@ -1,4 +1,4 @@
-#include "../lib/riscv.h"
+#include "../lib/propeller.h"
 #include "BufferSerial.h"
 #include "OneCogKbM.h"
 

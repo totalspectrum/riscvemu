@@ -41,21 +41,20 @@
 #include <sys/time.h>
 #endif
 
-#if defined(__propeller__) || defined(CATALINA)
+#if defined(__propeller__) || defined(CATALINA) || defined(__riscv)
 #include <propeller.h>
 #define getcyclespersec() (80000000)
-#elif defined(__riscv)
-#include "../lib/riscv.h"
-extern unsigned int getcyclespersec();
-#define printf iprintf
 #else
 extern unsigned int getcyclespersec();
 extern unsigned int getcnt();
-#define printf iprintf
 #endif
 
 #ifdef CATALINA
 #define getcnt() _cnt()
+#endif
+
+#ifdef __riscv
+#define printf iprintf
 #endif
 
 #ifdef _OPENMP

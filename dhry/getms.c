@@ -1,8 +1,6 @@
-#ifdef __riscv
-#include "../lib/riscv.h"
-#define CNT getcnt()
-#else
 #include <propeller.h>
+#ifdef __riscv
+#define CNT getcnt()
 #endif
 
 unsigned int

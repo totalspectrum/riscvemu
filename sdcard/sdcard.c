@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../lib/riscv.h"
+#include "propeller.h"
 #define drvl_(x) pinlow(x)
 #define drvh_(x) pinhigh(x)
 

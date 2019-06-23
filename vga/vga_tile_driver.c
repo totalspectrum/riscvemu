@@ -13,11 +13,7 @@ full color. To select the 8 bit version pass "4" (4 bytes per pixel)
 for the bytes_per_char parameter; for 32 bit pass "8"
 
  */
-#ifdef __riscv
-#include "riscv.h"
-#else
 #include <propeller.h>
-#endif
 #include "vga_tile_driver.h"
 
 #if defined(__GNUC__)

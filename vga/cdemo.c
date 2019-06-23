@@ -38,7 +38,7 @@ static void blankline() {
 }
 static void gotoxy(int x, int y) {
 
-    iprintf("(E%d;%dH)", y, x);
+    //iprintf("(E%d;%dH)", y, x);
     vga_tx(ESC);
     vga_tx('[');
     vga_dec(y);

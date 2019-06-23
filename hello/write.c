@@ -1,4 +1,4 @@
-#include "../lib/riscv.h"
+#include "../lib/propeller.h"
 #include <sys/stat.h>
 
 int
@@ -16,7 +16,7 @@ _write(int fd, unsigned char *data, int count)
     int orig_count = count;
     while (count-- > 0) {
         c = *data++;
-        csr_write(UART, c);
+        csr_write(UART_CSR, c);
     }
     return orig_count;
 }

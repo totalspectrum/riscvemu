@@ -9,12 +9,7 @@
 // those are probably good choices for running
 // with this
 //
-#ifdef __riscv
-#include "riscv.h"
-#define _clkfreq 160000000
-#else
 #include <propeller.h>
-#endif
 #include <string.h>
 #include "vgatext.h"
 

@@ -11,7 +11,7 @@
 #endif
 
 #include <stdint.h>
-#include "../lib/riscv.h"
+#include "../lib/propeller.h"
 
 extern void iprintf(const char *, ...);
 
@@ -54,24 +54,24 @@ void main()
         dirl_(inpin);
         waitcnt(160000000 / 10000 + getcnt());
         y = getpin(inpin);
-        x = csr_read(INA);
+        x = csr_read(INA_CSR);
         iprintf("cycles = %x:%08x x = %08x, y = %d\n", (uint32_t)(llc >> 32), (uint32_t)llc, x, y);
         waitcnt(getcnt() + 80000000);
     }
 #else    
     for(;;) {
         pinlow(pin); //setpin(pin, 0);
-        x = csr_read(OUTB);
+        x = csr_read(OUTB_CSR);
         iprintf("ping: %08x\n", x);
         cycles += freq;
         waitcnt(cycles);
         //setpin(pin, 1);
         pinhigh(pin);
-        x = csr_read(OUTB);
+        x = csr_read(OUTB_CSR);
         iprintf(" pong: %08x\n", x);
         cycles += freq;
         waitcnt(cycles);
     }
-#endif    
+#endif
 }
 

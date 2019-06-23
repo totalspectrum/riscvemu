@@ -1,4 +1,4 @@
-#include "riscv.h"
+#include "propeller.h"
 
 #if 0
 extern unsigned int getcyclespersec();

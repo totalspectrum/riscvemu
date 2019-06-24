@@ -1,3 +1,7 @@
+#ifndef PROPELLER_H
+#define PROPELLER_H
+
+#pragma once
 //
 // definitions for Control Status Registers for the P2 Risc-V platform
 //
@@ -182,3 +186,5 @@
 
 
 #define _clkfreq (*(unsigned int *)0x14)
+
+#endif

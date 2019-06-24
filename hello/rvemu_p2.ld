@@ -1,5 +1,5 @@
 /* Default linker script, for normal executables */
-/* modified to link to 0x2000 and remove padding */
+/* modified to link to 0x4000 and remove padding */
 /* Copyright (C) 2014-2019 Free Software Foundation, Inc.
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -13,7 +13,7 @@ SECTIONS
 {
   /* Read-only sections, merged into text segment: */
   /*PROVIDE (__executable_start = .);*/
-  . = 0x2000;
+  . = 0x4000;
   .interp         : { *(.interp) }
   .note.gnu.build-id  : { *(.note.gnu.build-id) }
   .hash           : { *(.hash) }

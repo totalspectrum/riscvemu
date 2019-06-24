@@ -32,17 +32,20 @@ p2emu.binary: p2emuheader.bin $(PROGNAME).bin
 
 STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
 
+# HDRSIZE=8192
+HDRSIZE=16384
+
 p1header.bin: $(STUBSRC)
 	$(FASTSPIN) -o p1header.bin ../debug.spin
-	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=8192
+	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2emuheader.bin: $(STUBSRC)
 	$(FASTSPIN) -2 -o p2emuheader.bin ../debug.spin
-	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=8192
+	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2header.bin: $(STUBSRC)
 	$(FASTSPIN) -2  -o p2header.bin ../riscvjit_p2.spin
-	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=8192
+	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=$(HDRSIZE)
 
 clean:
 	rm -f *~ *.o *.elf *.lst *.binary *.bin *.map *.p2asm *.pasm

@@ -163,7 +163,7 @@
 #define cogstop(a)                                     \
     ({                                                  \
         unsigned long v;                                \
-        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x3" \
+        __asm__ __volatile__ (".insn i CUSTOM_1, 1, %0, 3(%1)" \
                               : "=r"(v) : "r"(a)  );    \
         v;                                                  \
     })
@@ -171,7 +171,7 @@
 #define getrnd()                                        \
     ({                                                  \
         unsigned long v;                                \
-        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %0, x27" \
+        __asm__ __volatile__ (".insn i CUSTOM_1, 1, %0, 27(%0)" \
                               : "=r"(v)  );    \
         v;                                              \
     })
@@ -179,7 +179,7 @@
 #define waitx(a)                                     \
     ({                                                  \
         unsigned long v;                                \
-        __asm__ __volatile__ (".insn r CUSTOM_1, 1, 0, %0, %1, x31" \
+        __asm__ __volatile__ (".insn r CUSTOM_1, 1, %0, 31(%1)" \
                               : "=r"(v) : "r"(a)  );    \
         v;                                                  \
     })

@@ -21,15 +21,20 @@
   we can extract the address with "and" of the lut mask
 }
 #ifdef USE_LUT_CACHE
+'' $60 is good for fftbench
+'' $40 is what we used before
+''
 #define CACHE_TAG_SIZE $40
-#define CACHE_OFFSET_ALIGN 2
-#define CACHE_OFFSET_SHIFT 1
+'#define CACHE_OFFSET_ALIGN 1
+#define CACHE_OFFSET_SHIFT 0
 #else
 '' this assumes we use the whole LUT for cache tags
 #define CACHE_TAG_SIZE $200
 #define CACHE_OFFSET_ALIGN 16
 #define CACHE_OFFSET_SHIFT 4
 #endif
+#define CACHE_IGNORE_BITS 1
+
 { Initialize the cache
   Must be called from VM startup, and is called again whenever the
   cache overflows.
@@ -70,11 +75,14 @@ jit_trampoline_set_pc
 		call	#hub_print_newpc
 #endif
 		'' check for a cache hit by looking in the LUT
-		'' NOTE: this code assumes that all bits of the PC in ptrb are
+		'' NOTE: this code assumes that all but the CACHE_IGNORE_BITS
+		'' bits of the PC in ptrb are
 		'' significant. If you know that ptrb is aligned differently,
 		'' you should shift and mask
 		mov    jit_instr, ptrb
-		shr    jit_instr, #2			' divide by cache tag size
+#ifdef CACHE_IGNORE_BITS		
+		shr    jit_instr, #CACHE_IGNORE_BITS			' divide by cache tag size
+#endif		
 		and    jit_instr, #CACHE_TAG_SIZE-1
 		rdlut	jit_temp, jit_instr		' fetch cache data
 		mov	jit_orig_cachepc, jit_temp	' save a copy
@@ -154,9 +162,11 @@ cache_miss
 
     if_be	call	#jit_reinit_cache
 
+#ifdef CACHE_OFFSET_ALIGN
     		' align jit_cachepc on a valid boundary
     		add	jit_cachepc, #CACHE_OFFSET_ALIGN-1
 		andn	jit_cachepc, #CACHE_OFFSET_ALIGN-1
+#endif		
 		mov	jit_orig_cachepc, jit_cachepc	' save the starting cachepc
 		' update cache tag
 		mov	jit_temp, jit_orig_cachepc

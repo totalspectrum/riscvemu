@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-'#define USE_LUT_CACHE
+#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller

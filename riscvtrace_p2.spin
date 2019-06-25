@@ -566,7 +566,10 @@ csrvec_read_instr
 csrvec_write_instr
 		mov	pb, 0-0
 		call	#\ser_tx
-		
+singledest_pat
+		cogstop	0-0
+	if_c	neg	0-0, #1
+	
 '=========================================================================
 ' custom instructions
 '=========================================================================
@@ -1461,7 +1464,20 @@ hub_coginitinstr
 		jmp	#jit_emit
 
 hub_singledestinstr
-		jmp	#illegalinstr
+		cmp	rd, #0 wz
+	if_z	mov	rd, #temp
+		call	#emit_mov_rd_rs1
+		sets	singledest_pat, immval
+		setd	singledest_pat, rd
+		setd	singledest_pat+1, rd
+		mov	jit_instrptr, #singledest_pat
+		testb	immval, #31 wc wc
+		bitc	singledest_pat, #20 ' set C bit on instruction
+	if_nc	jmp	#emit1
+		testb	immval, #30 wc
+	if_nc	jmp	#emit1
+		jmp	#emit2
+
 
 hub_compressed_instr
 		sub	ptrb, #2	' adjust for compressed instruction

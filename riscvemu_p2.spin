@@ -3,7 +3,7 @@
 #define USE_LUT_FOR_CODE
 {{
    RISC-V Emulator for Parallax Propeller
-   Copyright 2017 Total Spectrum Software Inc.
+   Copyright 2017-2019 Total Spectrum Software Inc.
    Terms of use: MIT License (see the file LICENSE.txt)
 
    An emulator for the RISC-V processor architecture, designed to run
@@ -893,7 +893,6 @@ custom1op
 		mov	info4, rs3
 		mov	info3, funct2
 		mov	info2, #$ee
-    if_nz	jmp	#illegalinstr
 
 		alts	rs3, #x0
 		mov	rs3, 0-0
@@ -903,8 +902,30 @@ custom1op
     if_c	neg	dest, #1
 		jmp	#write_and_nexti
 not_coginit
-		jmp	#illegalinstr
+		cmp	funct3, #1 wz
+    if_nz	jmp	#not_destonly
 
+		alts	rs1, #x0	' initialize dest to value in rs1
+		mov	dest, 0-0
+		sar	opcode, #20	' extract immediate
+		mov	temp, opcode
+		and	opcode, #$1ff
+		setd	opcode, #dest
+		' or in a dest-only instruction
+		or	opcode, ##%0000_1101011_000_000000000_000000000
+		testb	temp, #31 wc
+		bitc	opcode, #20	' set C bit on instruction
+		mov	info3, temp	' wait for pipeline
+		mov	info2, opcode	' wait for pipeline
+		call	#opcode		' indirect call
+		testb	temp, #30 wz
+   if_c_and_nz	neg	dest, #1
+
+   		mov	info1, dest
+''		jmp	#illegalinstr
+		jmp	#write_and_nexti
+not_destonly
+		jmp	#illegalinstr
 csrrw
 		mov	funct3, #0
 		jmp	#do_csr

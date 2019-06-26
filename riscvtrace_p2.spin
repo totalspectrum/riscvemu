@@ -122,40 +122,40 @@ ct3_isr
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 optable
 {00}		long	HIBIT + loadtab			' TABLE: load instructions
-{01}		long	@@@illegalinstr			' float load
+{01}		long	@illegalinstr			' float load
 {02}		long	HIBIT + custom0tab		' TABLE: custom0 instructions
-{03}		long	@@@illegalinstr			' fence
+{03}		long	@illegalinstr			' fence
 {04}		long	HIBIT + mathtab			' TABLE: math immediate
-{05}		long	@@@hub_compile_auipc		' auipc instruction
-{06}		long	@@@illegalinstr			' wide math imm
-{07}		long	@@@illegalinstr			' ???
+{05}		long	@hub_compile_auipc		' auipc instruction
+{06}		long	@illegalinstr			' wide math imm
+{07}		long	@illegalinstr			' ???
 
 {08}		long	HIBIT + storetab		' TABLE: store instructions
-{09}		long	@@@illegalinstr			' float store
+{09}		long	@illegalinstr			' float store
 {0A}		long	HIBIT + custom1tab		' TABLE: custom1
-{0B}		long	@@@illegalinstr			' atomics
+{0B}		long	@illegalinstr			' atomics
 {0C}		long	HIBIT + mathtab			' TABLE: math reg<->reg
-{0D}		long	@@@hub_compile_lui		' lui
-{0E}		long	@@@illegalinstr			' wide math reg
-{0F}		long	@@@illegalinstr			' ???
+{0D}		long	@hub_compile_lui		' lui
+{0E}		long	@illegalinstr			' wide math reg
+{0F}		long	@illegalinstr			' ???
 
-{10}		long	@@@illegalinstr
-{11}		long	@@@illegalinstr
-{12}		long	@@@illegalinstr
-{13}		long	@@@illegalinstr
-{14}		long	@@@illegalinstr
-{15}		long	@@@illegalinstr
-{16}		long	@@@illegalinstr	' custom2
-{17}		long	@@@illegalinstr
+{10}		long	@illegalinstr
+{11}		long	@illegalinstr
+{12}		long	@illegalinstr
+{13}		long	@illegalinstr
+{14}		long	@illegalinstr
+{15}		long	@illegalinstr
+{16}		long	@illegalinstr	' custom2
+{17}		long	@illegalinstr
 
-{18}		long	@@@hub_condbranch	' conditional branch
-{19}		long	@@@hub_jalr
-{1A}		long	@@@illegalinstr
-{1B}		long	@@@hub_jal
+{18}		long	@hub_condbranch	' conditional branch
+{19}		long	@hub_jalr
+{1A}		long	@illegalinstr
+{1B}		long	@hub_jal
 {1C}		long	HIBIT + systab	' system
-{1D}		long	@@@illegalinstr
-{1E}		long	@@@illegalinstr	' custom3
-{1F}		long	@@@illegalinstr
+{1D}		long	@illegalinstr
+{1E}		long	@illegalinstr	' custom3
+{1F}		long	@illegalinstr
 
 
 sardata		sar	0,0
@@ -540,20 +540,20 @@ loadtab
 		rdbyte	SIGNBYTE, loadop wc
 		rdword	SIGNWORD, loadop wc
 		rdlong	0, loadop
-		long	@@@illegalinstr
+		long	@illegalinstr
 		rdbyte	0, loadop
 		rdword	0, loadop
 ldlongdata	rdlong	0, loadop
-		long	@@@illegalinstr
+		long	@illegalinstr
 storetab
 		wrbyte	0, storeop
 		wrword	0, storeop
 swlongdata	wrlong	0, storeop
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
 
 systab		jmp	#\illegalinstr
 		mov	0,csrrw
@@ -565,8 +565,8 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 
 custom0tab
-		long	@@@illegalinstr
-		long	@@@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
 		'' dirl, drvl, etc. only have dest fields, so
 		'' we cannot do the usual trick of putting the
 		'' address in the source field;
@@ -576,17 +576,17 @@ custom0tab
 		and	%001010000, pinsetinstr		' fltl
 		and	%001001000, pinsetinstr		' outl
 		and	%001000000, pinsetinstr		' dirl
-		long	@@@hub_wrpininstr
-		long	@@@hub_rdpininstr
+		long	@hub_wrpininstr
+		long	@hub_rdpininstr
 custom1tab
-		long	@@@hub_coginitinstr
-		long	@@@hub_singledestinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
-		long	@@@illegalinstr
+		long	@hub_coginitinstr
+		long	@hub_singledestinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
 end_of_tables
 
 '' utility routines for emitting 1-4 words

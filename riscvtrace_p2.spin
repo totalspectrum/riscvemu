@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-#define USE_LUT_CACHE
+'#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -126,7 +126,7 @@ optable
 {02}		long	HIBIT + custom0tab		' TABLE: custom0 instructions
 {03}		long	illegalinstr			' fence
 {04}		long	HIBIT + mathtab			' TABLE: math immediate
-{05}		long	auipc				' auipc instruction
+{05}		long	@@@hub_compile_auipc		' auipc instruction
 {06}		long	illegalinstr			' wide math imm
 {07}		long	illegalinstr			' ???
 
@@ -135,7 +135,7 @@ optable
 {0A}		long	HIBIT + custom1tab		' TABLE: custom1
 {0B}		long	illegalinstr			' atomics
 {0C}		long	HIBIT + mathtab			' TABLE: math reg<->reg
-{0D}		long	lui				' lui
+{0D}		long	@@@hub_compile_lui		' lui
 {0E}		long	illegalinstr			' wide math reg
 {0F}		long	illegalinstr			' ???
 
@@ -148,10 +148,10 @@ optable
 {16}		long	illegalinstr	' custom2
 {17}		long	illegalinstr
 
-{18}		long	condbranch	' conditional branch
+{18}		long	@@@hub_condbranch	' conditional branch
 {19}		long	jalr
 {1A}		long	illegalinstr
-{1B}		long	jal
+{1B}		long	@@@hub_jal
 {1C}		long	HIBIT + systab	' system
 {1D}		long	illegalinstr
 {1E}		long	illegalinstr	' custom3
@@ -391,53 +391,11 @@ imp_illegal
 		call	#\illegal_instr_error
 
 		
-auipc
-		jmp	#\hub_compile_auipc
-lui
-		jmp	#\hub_compile_lui
-		
 LUI_MASK	long	$fffff000
 
-{{
-   template for jal rd, offset
-imp_jal
-		mov	rd, ##retaddr  (compile time pc+4)
-	_ret_	loc	ptrb, #\newpc   (compile time pc+offset)
-
-   template for jalr rd, rs1, offset
-imp_jalr
-		mov	rd, ##retaddr  (compile time pc+4)
-		loc	ptrb, #\offset
-	_ret_	add	ptrb, rs1
-
-   if offset == 0 (common for ret) use
-               mov      rd, ##retaddr
-	_ret_  mov      ptrb, rs1
-}}
-
+' mask for finding jump address bits
 
 Jmask		long	$fff00fff
-
-jal
-		cmp	rd, #0 wz 		    ' if no writeback, just do the jump
-	if_e	jmp	#skip_write
-		mov	immval, ptrb	' get return address
-		mov	dest, rd
-		call	#emit_mvi	' move into rd
-skip_write
-		mov	immval, opcode
-		sar	immval, #20	' sign extend, get some bits in place
-		and	immval, Jmask
-		test	immval, #1 wc	' check old bit 20
-		mov	temp, opcode
-		andn	temp, Jmask
-		or	immval, temp
-		andn	immval, #1  	' clear low bit
-		muxc	immval, ##(1<<11)
-		add	immval, ptrb	' calculate branch target
-		mov	jit_condition, #$F	    ' unconditional jump
-		sub	immval, #4     	' adjust for PC offset
-		jmp	#issue_branch_cond
 
 jalr
 		' set up offset in ptrb
@@ -496,9 +454,6 @@ emit_pc_immval
 		or	loc_instr, immval
 		mov	jit_instrptr, #loc_instr
 		jmp	#emit1
-
-condbranch
-		jmp	#hub_condbranch
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' helper routines for compilation
@@ -722,7 +677,7 @@ compile_bytecode
 		mov	opdata, 0-0		' fetch long from table; set C if upper bit set
 
 		testb	opdata, #31 wc
-	if_nc	jmp	#getinstr
+	if_nc	jmp	opdata
 		' need to do a table indirection
 		and	opdata, #$1ff		' clear upper bits
 		alts	func3, opdata		' do table indirection
@@ -749,7 +704,7 @@ jit_condition	long	0
 
 dis_instr	long	0
 
-		fit	$1f0
+		fit	$1e0
 
 ''
 '' some lesser used routines that can go in HUB memory
@@ -1068,6 +1023,26 @@ handle_subi
 		mov	opdata, subdata
 		bith	opdata, #IMM_BITNUM
 		jmp	#continue_imm
+
+hub_jal
+		cmp	rd, #0 wz	' check for having to save return address
+	if_ne	mov	immval, ptrb	' get return address
+	if_ne	mov	dest, rd
+	if_ne	call	#emit_mvi	' move into rd
+
+		mov	immval, opcode
+		sar	immval, #20	' sign extend, get some bits in place
+		and	immval, Jmask
+		test	immval, #1 wc	' check old bit 20
+		mov	temp, opcode
+		andn	temp, Jmask
+		or	immval, temp
+		andn	immval, #1  	' clear low bit
+		muxc	immval, ##(1<<11)
+		add	immval, ptrb	' calculate branch target
+		mov	jit_condition, #$F	    ' unconditional jump
+		sub	immval, #4     	' adjust for PC offset
+		jmp	#issue_branch_cond
 
 hub_condbranch		
 		test	func3, #%100 wz

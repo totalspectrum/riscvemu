@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-#define USE_LUT_CACHE
+'#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -122,40 +122,40 @@ ct3_isr
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 optable
 {00}		long	HIBIT + loadtab			' TABLE: load instructions
-{01}		long	illegalinstr			' float load
+{01}		long	@@@illegalinstr			' float load
 {02}		long	HIBIT + custom0tab		' TABLE: custom0 instructions
-{03}		long	illegalinstr			' fence
+{03}		long	@@@illegalinstr			' fence
 {04}		long	HIBIT + mathtab			' TABLE: math immediate
 {05}		long	@@@hub_compile_auipc		' auipc instruction
-{06}		long	illegalinstr			' wide math imm
-{07}		long	illegalinstr			' ???
+{06}		long	@@@illegalinstr			' wide math imm
+{07}		long	@@@illegalinstr			' ???
 
 {08}		long	HIBIT + storetab		' TABLE: store instructions
-{09}		long	illegalinstr			' float store
+{09}		long	@@@illegalinstr			' float store
 {0A}		long	HIBIT + custom1tab		' TABLE: custom1
-{0B}		long	illegalinstr			' atomics
+{0B}		long	@@@illegalinstr			' atomics
 {0C}		long	HIBIT + mathtab			' TABLE: math reg<->reg
 {0D}		long	@@@hub_compile_lui		' lui
-{0E}		long	illegalinstr			' wide math reg
-{0F}		long	illegalinstr			' ???
+{0E}		long	@@@illegalinstr			' wide math reg
+{0F}		long	@@@illegalinstr			' ???
 
-{10}		long	illegalinstr
-{11}		long	illegalinstr
-{12}		long	illegalinstr
-{13}		long	illegalinstr
-{14}		long	illegalinstr
-{15}		long	illegalinstr
-{16}		long	illegalinstr	' custom2
-{17}		long	illegalinstr
+{10}		long	@@@illegalinstr
+{11}		long	@@@illegalinstr
+{12}		long	@@@illegalinstr
+{13}		long	@@@illegalinstr
+{14}		long	@@@illegalinstr
+{15}		long	@@@illegalinstr
+{16}		long	@@@illegalinstr	' custom2
+{17}		long	@@@illegalinstr
 
 {18}		long	@@@hub_condbranch	' conditional branch
-{19}		long	jalr
-{1A}		long	illegalinstr
+{19}		long	@@@hub_jalr
+{1A}		long	@@@illegalinstr
 {1B}		long	@@@hub_jal
 {1C}		long	HIBIT + systab	' system
-{1D}		long	illegalinstr
-{1E}		long	illegalinstr	' custom3
-{1F}		long	illegalinstr
+{1D}		long	@@@illegalinstr
+{1E}		long	@@@illegalinstr	' custom3
+{1F}		long	@@@illegalinstr
 
 
 sardata		sar	0,0
@@ -383,10 +383,6 @@ testbit_instr
 testpin_instr
 		testp	0-0 wc
 		
-sysinstr
-illegalinstr
-		jmp	#hub_illegalinstr
-
 imp_illegal
 		call	#\illegal_instr_error
 
@@ -396,30 +392,6 @@ LUI_MASK	long	$fffff000
 ' mask for finding jump address bits
 
 Jmask		long	$fff00fff
-
-jalr
-		' set up offset in ptrb
-		and	immval, LOC_MASK wz
-	if_nz	jmp	#.need_offset
-		sets	imp_jalr_nooff, rs1
-		mov	jit_instrptr, #imp_jalr_nooff
-		call	#emit1
-		jmp	#.load_retaddr
-.need_offset
-		andn	imp_jalr, LOC_MASK
-		or	imp_jalr, immval
-		sets	imp_jalr+1, rs1
-		mov	jit_instrptr, #imp_jalr
-		call	#emit2
-.load_retaddr
-		' now emit the final load
-		mov	immval, ptrb	' get return address
-		mov	dest, rd
-		call	#emit_mvi	' move into rd
-
-		' and emit the indirect branch code
-		mov	jit_condition, #$f
-		jmp	#jit_emit_indirect_branch
 
 imp_jalr
 		loc	ptrb, #\(0-0)
@@ -530,14 +502,6 @@ singledest_pat
 '=========================================================================
 pinsetinstr
 		jmp	#\hub_pinsetinstr
-wrpininstr
-		jmp	#\hub_wrpininstr
-rdpininstr
-		jmp	#\hub_rdpininstr
-coginitinstr
-		jmp	#\hub_coginitinstr
-singledestinstr
-		jmp	#\hub_singledestinstr
 '=========================================================================
 		'' VARIABLES
 temp		long 0
@@ -576,20 +540,20 @@ loadtab
 		rdbyte	SIGNBYTE, loadop wc
 		rdword	SIGNWORD, loadop wc
 		rdlong	0, loadop
-		and	0, illegalinstr
+		long	@@@illegalinstr
 		rdbyte	0, loadop
 		rdword	0, loadop
 ldlongdata	rdlong	0, loadop
-		and	0, illegalinstr
+		long	@@@illegalinstr
 storetab
 		wrbyte	0, storeop
 		wrword	0, storeop
 swlongdata	wrlong	0, storeop
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
 
 systab		jmp	#\illegalinstr
 		mov	0,csrrw
@@ -601,8 +565,8 @@ systab		jmp	#\illegalinstr
 		jmp	#\illegalinstr
 
 custom0tab
-		and	0, illegalinstr
-		and	0, illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
 		'' dirl, drvl, etc. only have dest fields, so
 		'' we cannot do the usual trick of putting the
 		'' address in the source field;
@@ -612,17 +576,17 @@ custom0tab
 		and	%001010000, pinsetinstr		' fltl
 		and	%001001000, pinsetinstr		' outl
 		and	%001000000, pinsetinstr		' dirl
-		and	0, wrpininstr
-		and	0, rdpininstr
+		long	@@@hub_wrpininstr
+		long	@@@hub_rdpininstr
 custom1tab
-		and	0, coginitinstr
-		and	0, singledestinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
-		and	0, illegalinstr
+		long	@@@hub_coginitinstr
+		long	@@@hub_singledestinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
+		long	@@@illegalinstr
 end_of_tables
 
 '' utility routines for emitting 1-4 words
@@ -681,9 +645,9 @@ compile_bytecode
 		' need to do a table indirection
 		and	opdata, #$1ff		' clear upper bits
 		alts	func3, opdata		' do table indirection
-		mov	opdata, 0-0
+		mov	opdata, 0-0 wc
+	if_nc	jmp	opdata			' if top bit clear, jump to instruction
 
-getinstr
 		mov	temp, opdata
 		and	temp, #$1ff
 		jmp	temp			' compile the instruction, return to JIT loop
@@ -703,6 +667,8 @@ jit_temp2	long	0
 jit_condition	long	0
 
 dis_instr	long	0
+
+dummy		res	32 ' can fit 47 in
 
 #ifdef DEBUG_ENGINE
 		fit	$1f0
@@ -1048,6 +1014,30 @@ hub_jal
 		sub	immval, #4     	' adjust for PC offset
 		jmp	#issue_branch_cond
 
+hub_jalr
+		' set up offset in ptrb
+		and	immval, LOC_MASK wz
+	if_nz	jmp	#.need_offset
+		sets	imp_jalr_nooff, rs1
+		mov	jit_instrptr, #imp_jalr_nooff
+		call	#emit1
+		jmp	#.load_retaddr
+.need_offset
+		andn	imp_jalr, LOC_MASK
+		or	imp_jalr, immval
+		sets	imp_jalr+1, rs1
+		mov	jit_instrptr, #imp_jalr
+		call	#emit2
+.load_retaddr
+		' now emit the final load
+		mov	immval, ptrb	' get return address
+		mov	dest, rd wz
+	if_nz	call	#emit_mvi	' move into rd
+
+		' and emit the indirect branch code
+		mov	jit_condition, #$f
+		jmp	#jit_emit_indirect_branch
+
 hub_condbranch		
 		test	func3, #%100 wz
 	if_z	mov	jit_condition, #%1010	' IF_Z
@@ -1093,6 +1083,8 @@ c_illegalinstr
 		add	immval, #2
 		jmp	#do_illegal
 		
+sysinstr
+illegalinstr
 hub_illegalinstr
 		mov	immval, ptrb
 do_illegal

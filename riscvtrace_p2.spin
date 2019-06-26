@@ -1,6 +1,6 @@
 '#define DEBUG_ENGINE
 '#define USE_DISASM
-'#define USE_LUT_CACHE
+#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -704,7 +704,11 @@ jit_condition	long	0
 
 dis_instr	long	0
 
+#ifdef DEBUG_ENGINE
+		fit	$1f0
+#else
 		fit	$1e0
+#endif
 
 ''
 '' some lesser used routines that can go in HUB memory

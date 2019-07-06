@@ -1,3 +1,10 @@
+#
+# Makefile for linking with newlib
+# This is a test harness for trying to make the whole
+# linking experience much more seamless, as well as a
+# proof of concept that newlib can be used in P2
+# development.
+#
 TOOLROOT=/opt/riscv/bin/riscv32-unknown-elf-
 FASTSPIN=/home/ersmith/Parallax/spin2cpp/build/fastspin
 
@@ -7,45 +14,37 @@ LD=$(TOOLROOT)ld
 LINKFILE=./rvemu_p2.ld
 
 PROGNAME=hello
+EMULATOR=p2trace.bin
+EMUOBJ=_rvp2.o
 
-default: p2emu.binary p2.binary
-
-default: $(PROGNAME).bin
+default: $(PROGNAME).binary
 
 LIBOBJS=write.o sbrk.o
 OBJS=$(PROGNAME).o $(LIBOBJS)
 
-$(PROGNAME).elf: $(OBJS)
+$(PROGNAME).binary: $(PROGNAME).elf
+	$(TOOLROOT)objdump -M numeric,no-aliases -d $(PROGNAME).elf > $(PROGNAME).lst
+	$(TOOLROOT)objcopy -O binary $(PROGNAME).elf $(PROGNAME).binary
+
+
+$(PROGNAME).elf: $(OBJS) $(EMUOBJ) $(LINKFILE)
 	$(CC) -Wl,--print-map -Wl,-T -Wl,$(LINKFILE) -o $(PROGNAME).elf $(OBJS) -lc -lgcc > $(PROGNAME).map
 
-$(PROGNAME).bin: $(PROGNAME).elf
-	$(TOOLROOT)objdump -M numeric,no-aliases -d $(PROGNAME).elf > $(PROGNAME).lst
-	$(TOOLROOT)objcopy -O binary $(PROGNAME).elf $(PROGNAME).bin
-
-
-p2.binary: p2header.bin $(PROGNAME).bin
-	cat p2header.bin $(PROGNAME).bin > p2.binary
-
-p2emu.binary: p2emuheader.bin $(PROGNAME).bin
-	cat p2emuheader.bin $(PROGNAME).bin > p2emu.binary
-
+_rvp2.o: _rvp2.s $(EMULATOR)
+	$(CC) -o _rvp2.o -c _rvp2.s
 
 STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvtrace_p2.spin ../jit/jit_engine.spinh
 
 # HDRSIZE=8192
 HDRSIZE=16384
 
-p1header.bin: $(STUBSRC)
-	$(FASTSPIN) -o p1header.bin ../debug.spin
-	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=$(HDRSIZE)
-
 p2emuheader.bin: $(STUBSRC)
 	$(FASTSPIN) -2 -o p2emuheader.bin ../debug.spin
 	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=$(HDRSIZE)
 
-p2header.bin: $(STUBSRC)
-	$(FASTSPIN) -2  -o p2header.bin ../riscvtrace_p2.spin
-	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=$(HDRSIZE)
+p2trace.bin: $(STUBSRC)
+	$(FASTSPIN) -2  -o p2trace.bin ../riscvtrace_p2.spin
+#	dd if=/dev/null of=p2trace.bin bs=1 count=1 seek=$(HDRSIZE)
 
 clean:
 	rm -f *~ *.o *.elf *.lst *.binary *.bin *.map *.p2asm *.pasm

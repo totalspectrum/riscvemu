@@ -1,5 +1,5 @@
 /* Default linker script, for normal executables */
-/* modified to link to 0x4000 and remove padding */
+/* modified to link to 0x0 and remove include P2 rv32imc emulator */
 /* Copyright (C) 2014-2019 Free Software Foundation, Inc.
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -9,11 +9,14 @@ OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv",
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SEARCH_DIR("/opt/riscv/riscv32-unknown-elf/lib");
+INPUT("_rvp2.o")
 SECTIONS
 {
+  . = 0x0;
+  .emulator       : { KEEP (*(.emulator)) }
+  PROVIDE (__endemulator = .);
   /* Read-only sections, merged into text segment: */
   /*PROVIDE (__executable_start = .);*/
-  . = 0x4000;
   .interp         : { *(.interp) }
   .note.gnu.build-id  : { *(.note.gnu.build-id) }
   .hash           : { *(.hash) }

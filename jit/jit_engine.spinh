@@ -71,6 +71,7 @@ jit_set_pc
 		mov	pb, #0		' source for dest is unknown
 	
 jit_trampoline_set_pc
+		and	ptrb, jit_loc_mask	' sanitize address
 #ifdef USE_DISASM
 		call	#hub_print_newpc
 #endif
@@ -207,7 +208,7 @@ jit_indirect_jump_pat
 		
 ''''''''''''''''''''''
 '' emit a direct branch to the
-'' value in jit_instrptr
+'' value in jit_branch_dest
 '' closes out the cache line and
 '' does not return
 '' the branch may be conditional
@@ -235,6 +236,7 @@ jit_do_emit
 	if_z	jmp	#jit_emit_jump_to_alt
 
 jit_direct_emit
+		and	jit_branch_dest, jit_loc_mask
 		andn	jit_direct_jump_pat, jit_loc_mask
 		or     	jit_direct_jump_pat, jit_branch_dest
 		andn	jit_direct_jump_pat+1, jit_cond_mask

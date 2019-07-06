@@ -30,7 +30,7 @@ p2emu.binary: p2emuheader.bin $(PROGNAME).bin
 	cat p2emuheader.bin $(PROGNAME).bin > p2emu.binary
 
 
-STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvjit_p2.spin
+STUBSRC=../debug.spin ../riscvemu.spin ../riscvemu_p2.spin ../riscvtrace_p2.spin ../jit/jit_engine.spinh
 
 # HDRSIZE=8192
 HDRSIZE=16384
@@ -44,7 +44,7 @@ p2emuheader.bin: $(STUBSRC)
 	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2header.bin: $(STUBSRC)
-	$(FASTSPIN) -2  -o p2header.bin ../riscvjit_p2.spin
+	$(FASTSPIN) -2  -o p2header.bin ../riscvtrace_p2.spin
 	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=$(HDRSIZE)
 
 clean:

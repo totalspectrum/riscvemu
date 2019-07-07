@@ -1,5 +1,5 @@
-'#define DEBUG_ENGINE
-'#define USE_DISASM
+#define DEBUG_ENGINE
+#define USE_DISASM
 '#define USE_LUT_CACHE
 
 {{
@@ -555,14 +555,14 @@ swlongdata	wrlong	0, storeop
 		long	@illegalinstr
 		long	@illegalinstr
 
-systab		jmp	#\illegalinstr
+systab		long	@illegalinstr
 		mov	0,csrrw
 		or	0,csrrw
 		andn	0,csrrw
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
-		jmp	#\illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
+		long	@illegalinstr
 
 custom0tab
 		long	@illegalinstr

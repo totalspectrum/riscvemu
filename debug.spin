@@ -62,7 +62,7 @@ PUB demo | cmd, arg, c, x
 #ifdef __P2__
   clkset(_clkmode, _clkfreq)
   ser.start(63, 62, 0, 230400)
-  pausems(500)
+  waitms(500)
 #else  
   ser.start(31, 30, 0, 115200)
 #endif  

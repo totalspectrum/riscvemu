@@ -327,8 +327,8 @@ optable
 {1F}		and	0,illegalinstr
 
 
-sardata		sar	0,0
-subdata		sub	0,0
+sardata		sar	0-0,0-0
+subdata		sub	0-0,0-0
 
 
 SIGNOP_BIT	long	$40000000	' RISCV bit for changing shr/sar
@@ -560,21 +560,21 @@ signmask
 		long	0
 
 wrpin_table
-		wrpin	0, 0
-		wxpin	0, 0
-		wypin	0, 0
+		wrpin	0-0, 0-0
+		wxpin	0-0, 0-0
+		wypin	0-0, 0-0
 		jmp	#\illegalinstr
 
 rdpin_table
-		wrc	0		' NOTE: S is nonzero, only D is used
-		rdpin	0, 0
-		rqpin	0, 0
-		akpin	0		' NOTE: D is 1, only S is used
+		wrc	0-0		' NOTE: S is nonzero, only D is used
+		rdpin	0-0, 0-0
+		rqpin	0-0, 0-0
+		akpin	0-0		' NOTE: D is 1, only S is used
 		
 LOC_MASK
 		long	$000FFFFF
 dirinstr
-		dirl	0
+		dirl	0-0
 testbit_instr
 		test	0-0, #1 wc
 testpin_instr
@@ -778,7 +778,7 @@ emit_nop
 		wrlut	emit_nop_pat,cacheptr
 	_ret_	add	cacheptr,#1
 emit_nop_pat
-		or	0,0	' a real nop won't work because we can't prefix with _ret_
+		or	0-0,0-0	' a real nop won't work because we can't prefix with _ret_
 
 '
 ' emit a mov of rs1 to rd
@@ -790,7 +790,7 @@ emit_mov_rd_rs1
 		setd	mov_pat,rd
 		wrlut	mov_pat,cacheptr
 	_ret_	add	cacheptr,#1
-mov_pat		mov	0,0
+mov_pat		mov	0-0,0-0
 
 CONDMASK	long	$f0000000
 
@@ -872,7 +872,7 @@ cache_offset	long	0
 tagidx		long	0	' index into l1 cache
 l2idx		long	0	' index into l2 cache
 l2ptr		long	0
-l2tag_base_ptr	long	@@@l2_tags
+l2tag_base_ptr	long	@l2_tags
 cachecnt	long	0
 l2_cache_base	long	TOP_OF_MEM
 

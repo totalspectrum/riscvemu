@@ -1,6 +1,6 @@
-'#define DEBUG_ENGINE
-'#define USE_DISASM
-'#define USE_LUT_CACHE
+#define DEBUG_ENGINE
+#define USE_DISASM
+#define USE_LUT_CACHE
 
 {{
    RISC-V Emulator for Parallax Propeller
@@ -1461,7 +1461,7 @@ hub_syspriv
 		cmp	immval, #1 wz
 	if_z	jmp	#compile_ebreak
 		andn	immval, #$1f
-		cmp	immval, #%0001001_00000
+		cmp	immval, #%0001001_00000 wz
 	if_z	jmp	#compile_sfence
 		jmp	#illegalinstr
 

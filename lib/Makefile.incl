@@ -9,7 +9,8 @@
 # ARCH= architecture to use (defaults to -march=rv32im)
 #
 # Change these two lines to suit your environment
-TOOLS=/opt/riscv/bin/riscv32-unknown-elf-
+#TOOLS=/opt/riscv/bin/riscv32-unknown-elf-
+TOOLS=/opt/riscv/bin/riscv-none-embed-
 SPIN2CPP=/home/ersmith/Parallax/spin2cpp/build/spin2cpp
 
 ARCH ?= rv32im
@@ -63,13 +64,13 @@ p1header.bin: $(STUBSRC)
 	dd if=/dev/null of=p1header.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2emuheader.bin: $(STUBSRC)
-	$(SPIN2CPP) --require=3.7.2 --p2 --code=hub --data=hub --asm --binary -o p2emuheader.bin ../debug.spin
+	$(SPIN2CPP) --require=4.1.0 --p2 --code=hub --data=hub --asm --binary -o p2emuheader.bin ../debug.spin
 	dd if=/dev/null of=p2emuheader.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2header.bin: $(STUBSRC)
-	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
+	$(SPIN2CPP) --p2 --require=4.1.0 --code=hub --data=hub --asm --dat -o p2header.bin ../riscvjit_p2.spin
 	dd if=/dev/null of=p2header.bin bs=1 count=1 seek=$(HDRSIZE)
 
 p2traceheader.bin: $(STUBSRC) ../jit/jit_engine.spinh
-	$(SPIN2CPP) --p2 --require=3.7.2 --code=hub --data=hub --asm --dat -o p2traceheader.bin ../riscvtrace_p2.spin
+	$(SPIN2CPP) --p2 --require=4.1.0 --code=hub --data=hub --asm --dat -o p2traceheader.bin ../riscvtrace_p2.spin
 	dd if=/dev/null of=p2traceheader.bin bs=1 count=1 seek=$(HDRSIZE)
